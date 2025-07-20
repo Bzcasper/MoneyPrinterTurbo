@@ -1270,9 +1270,11 @@ def siliconflow_tts(
                     sub_maker.offset = [
                         (
                             0,
-                            audio_duration_100ns
-                            if "audio_duration_100ns" in locals()
-                            else 10000000,
+                            (
+                                audio_duration_100ns
+                                if "audio_duration_100ns" in locals()
+                                else 10000000
+                            ),
                         )
                     ]
 

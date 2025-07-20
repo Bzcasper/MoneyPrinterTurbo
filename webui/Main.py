@@ -704,9 +704,11 @@ with middle_panel:
             selected_friendly_name = st.selectbox(
                 tr("Speech Synthesis"),
                 options=list(friendly_names.values()),
-                index=min(saved_voice_name_index, len(friendly_names) - 1)
-                if friendly_names
-                else 0,
+                index=(
+                    min(saved_voice_name_index, len(friendly_names) - 1)
+                    if friendly_names
+                    else 0
+                ),
             )
 
             voice_name = list(friendly_names.keys())[

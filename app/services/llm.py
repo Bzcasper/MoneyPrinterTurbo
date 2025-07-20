@@ -88,44 +88,47 @@ def _generate_response(prompt: str) -> str:
                     base_url = config.app.get("pollinations_base_url", "")
                     if not base_url:
                         base_url = "https://text.pollinations.ai/openai"
-                    model_name = config.app.get("pollinations_model_name", "openai-fast")
-                   
+                    model_name = config.app.get(
+                        "pollinations_model_name", "openai-fast"
+                    )
+
                     # Prepare the payload
                     payload = {
                         "model": model_name,
-                        "messages": [
-                            {"role": "user", "content": prompt}
-                        ],
-                        "seed": 101  # Optional but helps with reproducibility
+                        "messages": [{"role": "user", "content": prompt}],
+                        "seed": 101,  # Optional but helps with reproducibility
                     }
-                    
+
                     # Optional parameters if configured
                     if config.app.get("pollinations_private"):
                         payload["private"] = True
                     if config.app.get("pollinations_referrer"):
                         payload["referrer"] = config.app.get("pollinations_referrer")
-                    
-                    headers = {
-                        "Content-Type": "application/json"
-                    }
-                    
+
+                    headers = {"Content-Type": "application/json"}
+
                     # Make the API request
                     response = requests.post(base_url, headers=headers, json=payload)
                     response.raise_for_status()
                     result = response.json()
-                    
+
                     if result and "choices" in result and len(result["choices"]) > 0:
                         content = result["choices"][0]["message"]["content"]
                         return content.replace("\n", "")
                     else:
-                        raise Exception(f"[{llm_provider}] returned an invalid response format")
-                        
+                        raise Exception(
+                            f"[{llm_provider}] returned an invalid response format"
+                        )
+
                 except requests.exceptions.RequestException as e:
                     raise Exception(f"[{llm_provider}] request failed: {str(e)}")
                 except Exception as e:
                     raise Exception(f"[{llm_provider}] error: {str(e)}")
 
-            if llm_provider not in ["pollinations", "ollama"]:  # Skip validation for providers that don't require API key
+            if llm_provider not in [
+                "pollinations",
+                "ollama",
+            ]:  # Skip validation for providers that don't require API key
                 if not api_key:
                     raise ValueError(
                         f"{llm_provider}: api_key is not set, please set it in the config.toml file."
@@ -230,12 +233,12 @@ def _generate_response(prompt: str) -> str:
 
             if llm_provider == "ernie":
                 response = requests.post(
-                    "https://aip.baidubce.com/oauth/2.0/token", 
+                    "https://aip.baidubce.com/oauth/2.0/token",
                     params={
                         "grant_type": "client_credentials",
                         "client_id": api_key,
                         "client_secret": secret_key,
-                    }
+                    },
                 )
                 access_token = response.json().get("access_token")
                 url = f"{base_url}?access_token={access_token}"
@@ -441,4 +444,3 @@ if __name__ == "__main__":
     )
     print("######################")
     print(search_terms)
-    

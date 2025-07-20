@@ -75,10 +75,11 @@ class RedisState(BaseState):
             cursor, keys = self._redis.scan(cursor, count=page_size)
             total += len(keys)
             if total > start:
-                for key in keys[max(0, start - total):end - total]:
+                for key in keys[max(0, start - total) : end - total]:
                     task_data = self._redis.hgetall(key)
                     task = {
-                        k.decode("utf-8"): self._convert_to_original_type(v) for k, v in task_data.items()
+                        k.decode("utf-8"): self._convert_to_original_type(v)
+                        for k, v in task_data.items()
                     }
                     tasks.append(task)
                     if len(tasks) >= page_size:

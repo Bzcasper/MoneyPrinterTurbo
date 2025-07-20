@@ -11,22 +11,25 @@ from app.models.schema import MaterialInfo, VideoParams
 
 resources_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources")
 
+
 class TestTaskService(unittest.TestCase):
     def setUp(self):
         pass
-    
+
     def tearDown(self):
         pass
-    
+
     def test_task_local_materials(self):
         task_id = "00000000-0000-0000-0000-000000000000"
-        video_materials=[]
+        video_materials = []
         for i in range(1, 4):
-            video_materials.append(MaterialInfo(
-                provider="local",
-                url=os.path.join(resources_dir, f"{i}.png"),
-                duration=0
-            ))
+            video_materials.append(
+                MaterialInfo(
+                    provider="local",
+                    url=os.path.join(resources_dir, f"{i}.png"),
+                    duration=0,
+                )
+            )
 
         params = VideoParams(
             video_subject="金钱的作用",
@@ -56,11 +59,11 @@ class TestTaskService(unittest.TestCase):
             stroke_color="#000000",
             stroke_width=1.5,
             n_threads=2,
-            paragraph_number=1
+            paragraph_number=1,
         )
         result = tm.start(task_id=task_id, params=params)
         print(result)
-    
+
 
 if __name__ == "__main__":
-    unittest.main() 
+    unittest.main()
