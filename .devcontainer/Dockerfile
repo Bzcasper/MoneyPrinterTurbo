@@ -9,6 +9,9 @@ RUN apt-get update && \
     python3-pip \
     curl \
     build-essential \
+    ffmpeg \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Poetry (if using) or other tools
@@ -18,7 +21,7 @@ RUN pip3 install --no-cache poetry
 WORKDIR /workspace
 
 # Ensure correct permissions
-RUN chown -R vscode:vscode /workspace
+RUN chown -R root:root /workspace
 
 # Default user
 USER root
