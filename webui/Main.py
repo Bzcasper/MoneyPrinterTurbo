@@ -22,8 +22,8 @@ from app.models.schema import (
     MaterialInfo,
     VideoAspect,
     VideoConcatMode,
-    VideoParams,
     VideoTransitionMode,
+    VideoParams,
 )
 from app.services import llm, voice
 from app.services import task as tm
@@ -143,8 +143,8 @@ with st.sidebar:
             }
             st.success(f"Template '{template_name}' saved!")
 
-# Rest of the file continues with enhanced functionality...
-# [Previous Main.py content continues here with the same structure but enhanced features]
+# Create log container in the main area
+log_container = st.container()
 
 # Enhanced task management
 def display_task_history():
