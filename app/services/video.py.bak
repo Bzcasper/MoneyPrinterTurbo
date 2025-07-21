@@ -40,60 +40,6 @@ from app.services.utils import video_effects
 from app.utils import utils
 
 
-def validate_video_file(file_path: str) -> bool:
-    """
-    Validate video file integrity and properties to prevent black screen issues
-    
-    Args:
-        file_path: Path to video file
-        
-    Returns:
-        bool: True if video is valid, False otherwise
-    """
-    try:
-        if not os.path.exists(file_path):
-            logger.error(f"Video file does not exist: {file_path}")
-            return False
-        
-        if os.path.getsize(file_path) == 0:
-            logger.error(f"Video file is empty: {file_path}")
-            return False
-        
-        # Basic video validation using moviepy
-        test_clip = VideoFileClip(file_path)
-        
-        # Check basic properties
-        if not hasattr(test_clip, 'size') or not test_clip.size:
-            logger.error(f"Video has no size information: {file_path}")
-            close_clip(test_clip)
-            return False
-        
-        width, height = test_clip.size
-        if width <= 0 or height <= 0:
-            logger.error(f"Video has invalid dimensions {width}x{height}: {file_path}")
-            close_clip(test_clip)
-            return False
-        
-        if hasattr(test_clip, 'duration') and test_clip.duration is not None:
-            if test_clip.duration <= 0:
-                logger.error(f"Video has invalid duration {test_clip.duration}s: {file_path}")
-                close_clip(test_clip)
-                return False
-        
-        # Check aspect ratio
-        aspect_ratio = width / height if height > 0 else 1.0
-        if aspect_ratio > 50.0 or aspect_ratio < 0.02:
-            logger.warning(f"Video has extreme aspect ratio {aspect_ratio:.3f}: {file_path}")
-        
-        close_clip(test_clip)
-        logger.debug(f"Video validation passed: {file_path} ({width}x{height})")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Video validation failed for {file_path}: {str(e)}")
-        return False
-
-
 class SubClippedVideoClip:
     def __init__(
         self,
@@ -752,25 +698,10 @@ def _process_single_clip(
         clip_duration = clip.duration
         clip_w, clip_h = clip.size
         
-        # Validate clip dimensions and aspect ratio
-        if clip_w < 64 or clip_h < 64:
-            logger.warning(
-                f"[Thread-{threading.current_thread().ident}] Clip {clip_index} has very small dimensions "
-                f"{clip_w}x{clip_h}, may result in poor quality"
-            )
-        
-        clip_ratio = clip_w / clip_h if clip_h > 0 else 1.0
-        video_ratio = video_width / video_height if video_height > 0 else 1.0
-        
-        # Check for extreme aspect ratios that might cause issues
-        if clip_ratio > 10.0 or clip_ratio < 0.1:
-            logger.warning(
-                f"[Thread-{threading.current_thread().ident}] Clip {clip_index} has extreme aspect ratio "
-                f"{clip_ratio:.2f}, may not display well"
-            )
-        
         # Resize clip if dimensions don't match target
         if clip_w != video_width or clip_h != video_height:
+            clip_ratio = clip.w / clip.h
+            video_ratio = video_width / video_height
             logger.debug(
                 f"[Thread-{threading.current_thread().ident}] Resizing clip {clip_index}, "
                 f"source: {clip_w}x{clip_h}, target: {video_width}x{video_height}"
@@ -787,23 +718,9 @@ def _process_single_clip(
                 new_width = int(clip_w * scale_factor)
                 new_height = int(clip_h * scale_factor)
 
-                # Create background using blurred/stretched version instead of black
-                try:
-                    # First attempt: blur the original clip as background
-                    background = clip.resized(new_size=(video_width, video_height)).with_fx(
-                        lambda c: c.resized(height=video_height, width=video_width)
-                    )
-                    # Apply blur effect to make it less distracting
-                    try:
-                        from moviepy.video.fx.blur import Blur
-                        background = background.with_fx(Blur, 3.0).with_opacity(0.7)
-                    except ImportError:
-                        # Fallback if blur is not available - just reduce opacity
-                        background = background.with_opacity(0.5)
-                except Exception:
-                    # Fallback: use stretched version of clip
-                    background = clip.resized(new_size=(video_width, video_height))
-                
+                background = ColorClip(
+                    size=(video_width, video_height), color=(0, 0, 0)
+                ).with_duration(clip_duration)
                 clip_resized = clip.resized(
                     new_size=(new_width, new_height)
                 ).with_position("center")
@@ -915,12 +832,6 @@ def _process_single_clip(
 
         # Clean up MoviePy resources immediately
         close_clip(clip)
-
-        # Validate the generated clip file
-        if not validate_video_file(clip_file):
-            error_msg = f"Generated clip {clip_index} failed validation"
-            logger.error(f"[Thread-{threading.current_thread().ident}] {error_msg}")
-            return ClipProcessingResult(None, success=False, error=error_msg)
 
         # Create result with processed clip info
         result_clip = SubClippedVideoClip(
@@ -1133,11 +1044,6 @@ def combine_videos(
     subclipped_items = []
     video_duration = 0
     for video_path in video_paths:
-        # Validate input video before processing
-        if not validate_video_file(video_path):
-            logger.warning(f"Skipping invalid video file: {video_path}")
-            continue
-            
         clip = VideoFileClip(video_path)
         clip_duration = clip.duration
         clip_w, clip_h = clip.size
@@ -1232,17 +1138,10 @@ def combine_videos(
     # if there is only one clip, use it directly
     if len(processed_clips) == 1:
         logger.info("using single clip directly")
-        try:
-            shutil.copy(processed_clips[0].file_path, combined_video_path)
-            logger.info("single clip copied successfully")
-            # Only delete temp files after successful copy
-            clip_files = [clip.file_path for clip in processed_clips]
-            delete_files(clip_files)
-            logger.info("video combining completed")
-            return combined_video_path
-        except Exception as e:
-            logger.error(f"failed to copy single clip: {str(e)}")
-            return combined_video_path
+        shutil.copy(processed_clips[0].file_path, combined_video_path)
+        delete_files(processed_clips)
+        logger.info("video combining completed")
+        return combined_video_path
 
     # create initial video file as base
     base_clip_path = processed_clips[0].file_path
@@ -1280,16 +1179,8 @@ def combine_videos(
             f"({((memory_before - memory_after) / memory_before * 100):+.1f}% memory reduction)"
         )
         
-        # Store performance metrics in coordination memory
-        try:
-            memory_reduction = ((memory_before - memory_after) / memory_before * 100) if memory_before > 0 else 0
-            subprocess.run([
-                'npx', 'claude-flow@alpha', 'hooks', 'notify',
-                '--message', f'FFmpeg concat: {processing_time:.2f}s, {len(processed_clips)} clips, {memory_reduction:+.1f}% memory reduction',
-                '--level', 'success'
-            ], capture_output=True, timeout=10)
-        except Exception:
-            pass  # Don't fail on telemetry errors
+        # Store performance metrics
+        # Store performance metrics in coordination memory\n        try:\n            subprocess.run([\n                'npx', 'claude-flow@alpha', 'hooks', 'notification',\n                '--message', f'FFmpeg concat: {processing_time:.2f}s, {len(processed_clips)} clips, {((memory_before - memory_after) / memory_before * 100):+.1f}% memory reduction',\n                '--telemetry', 'true'\n            ], capture_output=True, timeout=10)\n        except Exception:\n            pass  # Don't fail on telemetry errors
         
     else:
         # Fallback to MoviePy concatenation if FFmpeg fails
@@ -1335,21 +1226,8 @@ def combine_videos(
             shutil.copy(temp_merged_video, combined_video_path)
             delete_files(temp_merged_video)
 
-    # after merging, rename final result to target file name (only if MoviePy was used)
-    if os.path.exists(temp_merged_video) and not ffmpeg_success:
-        try:
-            os.rename(temp_merged_video, combined_video_path)
-            logger.info("final video renamed to target path")
-        except Exception as e:
-            logger.error(f"failed to rename final video: {str(e)}")
-            # If rename fails but temp file exists, try copy instead
-            if os.path.exists(temp_merged_video):
-                try:
-                    shutil.copy(temp_merged_video, combined_video_path)
-                    os.remove(temp_merged_video)
-                    logger.info("final video copied to target path")
-                except Exception as copy_e:
-                    logger.error(f"failed to copy final video: {str(copy_e)}")
+    # after merging, rename final result to target file name
+    os.rename(temp_merged_video, combined_video_path)
 
     # clean temp files
     clip_files = [clip.file_path for clip in processed_clips]
@@ -1626,33 +1504,11 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
 
         width = clip.size[0]
         height = clip.size[1]
-        
-        # Enhanced validation for video dimensions and aspect ratios
-        if width < 240 or height < 240:
-            logger.error(
-                f"material resolution too low: {width}x{height}, minimum 240x240 required"
-            )
-            close_clip(clip)
-            continue
-        
         if width < 480 or height < 480:
             logger.warning(
-                f"low resolution material: {width}x{height}, recommended minimum 480x480"
+                f"low resolution material: {width}x{height}, minimum 480x480 required"
             )
-        
-        # Check aspect ratio validity
-        aspect_ratio = width / height if height > 0 else 1.0
-        if aspect_ratio > 10.0 or aspect_ratio < 0.1:
-            logger.warning(
-                f"extreme aspect ratio detected: {aspect_ratio:.2f} for {material.url}"
-            )
-        
-        # Check for corrupted or zero-duration clips
-        if hasattr(clip, 'duration') and clip.duration is not None:
-            if clip.duration <= 0:
-                logger.error(f"invalid clip duration {clip.duration}s for {material.url}")
-                close_clip(clip)
-                continue
+            continue
 
         if ext in const.FILE_TYPE_IMAGES:
             logger.info(f"processing image: {material.url}")
