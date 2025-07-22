@@ -9,6 +9,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: moneyprinterturbo-webui:latest
     container_name: moneyprinterturbo-webui
     ports:
       - "8501:8501"
@@ -24,6 +25,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: moneyprinterturbo-api:latest
     container_name: moneyprinterturbo-api
     ports:
       - "8080:8080"
