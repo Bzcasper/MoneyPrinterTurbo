@@ -4,45 +4,53 @@ FROM python:3.11-slim-bullseye
 # Set the working directory in the container
 WORKDIR /MoneyPrinterTurbo
 
-# 设置/MoneyPrinterTurbo目录权限为777
-RUN chmod 777 /MoneyPrinterTurbo
-
+# Set environment variables
 ENV PYTHONPATH="/MoneyPrinterTurbo"
+ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies
+# Install system dependencies in a single layer
 RUN apt-get update && apt-get install -y \
     git \
     imagemagick \
     ffmpeg \
+    curl \
+    gnupg \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && apt-get install -y curl gnupg build-essential
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-RUN apt-get install -y nodejs
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
 # Fix security policy for ImageMagick
-RUN sed -i '/<policy domain="path" rights="none" pattern="@\*"/d' /etc/ImageMagick-6/policy.xml
+RUN sed -i '/<policy domain="path" rights="none" pattern="@\*"/d' /etc/ImageMagick-6/policy.xml || true
 
-# Copy only the requirements.txt first to leverage Docker cache
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /MoneyPrinterTurbo
+
+# Copy requirements first for better caching
 COPY requirements.txt ./
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Now copy the rest of the codebase into the image
+# Copy application code
 COPY . .
 
-# Expose the port the app runs on
-EXPOSE 8501
+# Change ownership to appuser
+RUN chown -R appuser:appuser /MoneyPrinterTurbo
 
-# Command to run the application
-CMD ["streamlit", "run", "./webui/Main.py","--browser.serverAddress=127.0.0.1","--server.enableCORS=True","--browser.gatherUsageStats=False"]
+# Switch to non-root user
+USER appuser
 
-# 1. Build the Docker image using the following command
-# docker build -t moneyprinterturbo .
+# Expose ports
+EXPOSE 8501 8080
 
-# 2. Run the Docker container using the following command
-## For Linux or MacOS:
-# docker run -v $(pwd)/config.toml:/MoneyPrinterTurbo/config.toml -v $(pwd)/storage:/MoneyPrinterTurbo/storage -p 8501:8501 moneyprinterturbo
-## For Windows:
-# docker run -v ${PWD}/config.toml:/MoneyPrinterTurbo/config.toml -v ${PWD}/storage:/MoneyPrinterTurbo/storage -p 8501:8501 moneyprinterturbo
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# Default command (can be overridden)
+CMD ["streamlit", "run", "./webui/Main.py", "--browser.serverAddress=0.0.0.0", "--server.enableCORS=True", "--browser.gatherUsageStats=False"]

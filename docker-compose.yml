@@ -1,24 +1,36 @@
+version: '3.8'
+
 x-common-volumes: &common-volumes
-  - ./:/MoneyPrinterTurbo
+  - ./:/MoneyPrinterTurbo:rw
+  - ./storage:/MoneyPrinterTurbo/storage:rw
 
 services:
   webui:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: "moneyprinterturbo-webui"
+    container_name: moneyprinterturbo-webui
     ports:
       - "8501:8501"
-    command: [ "streamlit", "run", "./webui/Main.py","--browser.serverAddress=127.0.0.1","--server.enableCORS=True","--browser.gatherUsageStats=False" ]
+    command: [ "streamlit", "run", "./webui/Main.py", "--browser.serverAddress=0.0.0.0", "--server.enableCORS=True", "--browser.gatherUsageStats=False" ]
     volumes: *common-volumes
-    restart: always
+    restart: unless-stopped
+    environment:
+      - PYTHONPATH=/MoneyPrinterTurbo
+      - HOST=0.0.0.0
+      - PORT=8501
+    
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: "moneyprinterturbo-api"
+    container_name: moneyprinterturbo-api
     ports:
       - "8080:8080"
     command: [ "python3", "main.py" ]
     volumes: *common-volumes
-    restart: always
+    restart: unless-stopped
+    environment:
+      - PYTHONPATH=/MoneyPrinterTurbo
+      - HOST=0.0.0.0
+      - PORT=8080
