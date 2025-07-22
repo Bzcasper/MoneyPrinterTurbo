@@ -133,7 +133,7 @@ with st.sidebar:
         st.session_state["tasks"] = []
         st.rerun()
     
-    if st.button("💾 Save Template"):
+    if st.button("💾 Save Template", key='save_template_quick'):
         template_name = st.text_input("Template Name")
         if template_name:
             st.session_state["templates"][template_name] = {
@@ -620,7 +620,7 @@ with st.expander("📁 Template Management"):
     with col_t1:
         st.write("**Save Current Settings as Template**")
         template_name = st.text_input("Template Name", key="new_template_name")
-        if st.button("💾 Save Template"):
+        if st.button("💾 Save Template", key='save_template_main'):
             if template_name:
                 template_data = {
                     "video_subject": st.session_state.get("video_subject", ""),

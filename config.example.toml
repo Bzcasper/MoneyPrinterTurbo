@@ -207,8 +207,44 @@ speech_region = ""
 # Get your API key at https://siliconflow.cn
 api_key = ""
 
+[gpt_sovits]
+# GPT-SoVITS Voice Synthesis Settings
+# GPT-SoVITS API服务地址
+api_base_url = "http://localhost:9880"
+# API Key (可选，如果服务需要认证)
+api_key = ""
+# 请求超时时间（秒）
+timeout = 60
+# 支持的声音模型路径
+models_dir = "models/gpt_sovits"
+
 [ui]
 # UI related settings
 # 是否隐藏日志信息
 # Whether to hide logs in the UI
 hide_log = false
+
+[database]
+# Session / metadata storage for Claude-Flow Hive-Mind
+type = "sqlite"            # sqlite | memory
+path = "data/sessions.db"  # Relative to project root
+fallback_to_memory = true  # Fall back to RAM if SQLite unavailable
+
+[video]
+# Enhanced Video Generation Settings
+# 默认视频格式 (youtube_shorts, instagram_reels, tiktok, landscape, square)
+default_format = "youtube_shorts"
+# 默认视频时长（秒）
+default_duration = 30
+# 最大视频时长（秒）
+max_duration = 60
+# 默认分辨率 (1080x1920 for vertical, 1920x1080 for landscape)
+default_resolution = "1080x1920"
+# GPU加速
+enable_gpu_acceleration = true
+# 字幕设置
+enable_auto_subtitles = true
+subtitle_font_size = 48
+subtitle_color = "white"
+subtitle_stroke_color = "black"
+subtitle_stroke_width = 2
