@@ -10,7 +10,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: moneyprinterturbo-webui:latest
-    container_name: moneyprinterturbo-webui
+    container_name: moneyprinterturbo-webui-new
     ports:
       - "8501:8501"
     command: [ "streamlit", "run", "./webui/Main.py", "--browser.serverAddress=0.0.0.0", "--server.enableCORS=True", "--browser.gatherUsageStats=False" ]
@@ -26,7 +26,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: moneyprinterturbo-api:latest
-    container_name: moneyprinterturbo-api
+    container_name: moneyprinterturbo-api-new
     ports:
       - "8080:8080"
     command: [ "python3", "main.py" ]
