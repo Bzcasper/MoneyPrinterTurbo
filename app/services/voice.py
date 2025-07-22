@@ -16,6 +16,32 @@ from app.config import config
 from app.utils import utils
 
 
+def get_gpt_sovits_voices() -> list[str]:
+    """
+    获取GPT-SoVITS的声音列表
+
+    Returns:
+        声音列表，格式为 ["gpt-sovits:model_name:voice_name", ...]
+    """
+    # GPT-SoVITS支持的声音列表
+    voices_with_info = [
+        ("gpt-sovits-v2", "narrator", "Male", "深沉叙述者"),
+        ("gpt-sovits-v2", "emma", "Female", "温和女声"),
+        ("gpt-sovits-v2", "david", "Male", "清晰男声"),
+        ("gpt-sovits-v2", "sarah", "Female", "甜美女声"),
+        ("gpt-sovits-v2", "professional", "Male", "专业播报"),
+        ("gpt-sovits-v2", "casual", "Female", "轻松对话"),
+        ("gpt-sovits-v2", "energetic", "Male", "活力青春"),
+        ("gpt-sovits-v2", "calm", "Female", "平静舒缓"),
+    ]
+
+    # 添加gpt-sovits:前缀，并格式化为显示名称
+    return [
+        f"gpt-sovits:{model}:{voice}-{gender}-{desc}"
+        for model, voice, gender, desc in voices_with_info
+    ]
+
+
 def get_siliconflow_voices() -> list[str]:
     """
     获取硅基流动的声音列表
@@ -1077,6 +1103,11 @@ def is_siliconflow_voice(voice_name: str):
     return voice_name.startswith("siliconflow:")
 
 
+def is_gpt_sovits_voice(voice_name: str):
+    """检查是否是GPT-SoVITS的声音"""
+    return voice_name.startswith("gpt-sovits:")
+
+
 def tts(
     text: str,
     voice_name: str,
@@ -1086,6 +1117,21 @@ def tts(
 ) -> Union[SubMaker, None]:
     if is_azure_v2_voice(voice_name):
         return azure_tts_v2(text, voice_name, voice_file)
+    elif is_gpt_sovits_voice(voice_name):
+        # 从voice_name中提取模型和声音
+        # 格式: gpt-sovits:model:voice-Gender-Description
+        parts = voice_name.split(":")
+        if len(parts) >= 3:
+            model = parts[1]
+            # 提取voice信息，例如 "emma-Female-温和女声" -> "emma"
+            voice_info = parts[2]
+            voice = voice_info.split("-")[0]
+            return gpt_sovits_tts(
+                text, model, voice, voice_rate, voice_file, voice_volume
+            )
+        else:
+            logger.error(f"Invalid gpt-sovits voice name format: {voice_name}")
+            return None
     elif is_siliconflow_voice(voice_name):
         # 从voice_name中提取模型和声音
         # 格式: siliconflow:model:voice-Gender
@@ -1287,6 +1333,169 @@ def siliconflow_tts(
                 )
         except Exception as e:
             logger.error(f"siliconflow tts failed: {str(e)}")
+
+    return None
+
+
+def gpt_sovits_tts(
+    text: str,
+    model: str,
+    voice: str,
+    voice_rate: float,
+    voice_file: str,
+    voice_volume: float = 1.0,
+) -> Union[SubMaker, None]:
+    """
+    使用GPT-SoVITS的API生成语音
+
+    Args:
+        text: 要转换为语音的文本
+        model: 模型名称，如 "gpt-sovits-v2"
+        voice: 声音名称，如 "emma", "david"
+        voice_rate: 语音速度，范围[0.5, 2.0]
+        voice_file: 输出的音频文件路径
+        voice_volume: 语音音量，范围[0.0, 2.0]
+
+    Returns:
+        SubMaker对象或None
+    """
+    text = text.strip()
+    api_base_url = config.gpt_sovits.get("api_base_url", "http://localhost:9880")
+    api_key = config.gpt_sovits.get("api_key", "")
+    
+    if not api_base_url:
+        logger.error("GPT-SoVITS API base URL is not set")
+        return None
+
+    # 构建API端点
+    url = f"{api_base_url.rstrip('/')}/tts"
+    
+    # 准备请求参数
+    payload = {
+        "text": text,
+        "text_lang": "auto",  # 自动检测语言
+        "ref_audio_path": None,  # 可以后续添加参考音频支持
+        "aux_ref_audio_paths": [],
+        "prompt_lang": "auto",
+        "prompt_text": "",
+        "top_k": 5,
+        "top_p": 1.0,
+        "temperature": 1.0,
+        "text_split_method": "cut5",
+        "batch_size": 1,
+        "batch_threshold": 0.75,
+        "split_bucket": True,
+        "speed_factor": voice_rate,
+        "fragment_interval": 0.3,
+        "seed": -1,
+        "media_type": "wav",
+        "streaming_mode": False,
+        "parallel_infer": True,
+        "repetition_penalty": 1.35
+    }
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    for i in range(3):  # 尝试3次
+        try:
+            logger.info(
+                f"start gpt-sovits tts, model: {model}, voice: {voice}, try: {i + 1}"
+            )
+
+            response = requests.post(url, json=payload, headers=headers, timeout=60)
+
+            if response.status_code == 200:
+                # 检查响应内容类型
+                content_type = response.headers.get('content-type', '')
+                
+                if 'audio' in content_type:
+                    # 直接是音频数据
+                    with open(voice_file, "wb") as f:
+                        f.write(response.content)
+                else:
+                    # 可能是JSON响应包含音频URL或base64数据
+                    try:
+                        result = response.json()
+                        if 'audio_data' in result:
+                            # base64编码的音频数据
+                            import base64
+                            audio_data = base64.b64decode(result['audio_data'])
+                            with open(voice_file, "wb") as f:
+                                f.write(audio_data)
+                        elif 'audio_url' in result:
+                            # 音频URL，需要再次请求
+                            audio_response = requests.get(result['audio_url'], timeout=30)
+                            with open(voice_file, "wb") as f:
+                                f.write(audio_response.content)
+                        else:
+                            logger.error("No audio data found in GPT-SoVITS response")
+                            continue
+                    except Exception as e:
+                        logger.error(f"Failed to parse GPT-SoVITS response: {str(e)}")
+                        continue
+
+                # 创建SubMaker对象
+                sub_maker = SubMaker()
+
+                # 获取音频文件的实际长度
+                try:
+                    from moviepy import AudioFileClip
+
+                    audio_clip = AudioFileClip(voice_file)
+                    audio_duration = audio_clip.duration
+                    audio_clip.close()
+
+                    # 将音频长度转换为100纳秒单位（与edge_tts兼容）
+                    audio_duration_100ns = int(audio_duration * 10000000)
+
+                    # 使用文本分割来创建更准确的字幕
+                    sentences = utils.split_string_by_punctuations(text)
+
+                    if sentences:
+                        # 计算每个句子的大致时长（按字符数比例分配）
+                        total_chars = sum(len(s) for s in sentences)
+                        char_duration = (
+                            audio_duration_100ns / total_chars if total_chars > 0 else 0
+                        )
+
+                        current_offset = 0
+                        for sentence in sentences:
+                            if not sentence.strip():
+                                continue
+
+                            # 计算当前句子的时长
+                            sentence_chars = len(sentence)
+                            sentence_duration = int(sentence_chars * char_duration)
+
+                            # 添加到SubMaker
+                            sub_maker.subs.append(sentence)
+                            sub_maker.offset.append(
+                                (current_offset, current_offset + sentence_duration)
+                            )
+
+                            # 更新偏移量
+                            current_offset += sentence_duration
+                    else:
+                        # 如果无法分割，则使用整个文本作为一个字幕
+                        sub_maker.subs = [text]
+                        sub_maker.offset = [(0, audio_duration_100ns)]
+
+                except Exception as e:
+                    logger.warning(f"Failed to create accurate subtitles: {str(e)}")
+                    # 回退到简单的字幕
+                    sub_maker.subs = [text]
+                    sub_maker.offset = [(0, 10000000)]  # 假设10秒
+
+                logger.success(f"gpt-sovits tts succeeded: {voice_file}")
+                return sub_maker
+            else:
+                logger.error(
+                    f"gpt-sovits tts failed with status code {response.status_code}: {response.text}"
+                )
+        except Exception as e:
+            logger.error(f"gpt-sovits tts failed: {str(e)}")
 
     return None
 
