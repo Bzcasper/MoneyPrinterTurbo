@@ -1,5 +1,12 @@
 {
-  "dependencies": {
-    "repomix": "^1.2.0"
+  "name": "moneyprinterturbo",
+  "version": "1.0.0",
+  "description": "MoneyPrinterTurbo Enhanced",
+  "private": true,
+  "devDependencies": {
+    "repomix": "^0.2.0"
+  },
+  "scripts": {
+    "repomix": "repomix --config repomix.config.json"
   }
 }
