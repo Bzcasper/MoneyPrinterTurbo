@@ -1,0 +1,55 @@
+{
+  "output": {
+    "filePath": "repomix-output.md",
+    "style": "markdown",
+    "compress": false
+  },
+  "include": [
+    "**/*"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "node_modules/**",
+      "*.log",
+      "*.tmp",
+      "*.temp",
+      ".env*",
+      "dist/**",
+      "build/**",
+      "coverage/**",
+      ".git/**",
+      ".DS_Store",
+      "Thumbs.db",
+      "*.pyc",
+      "__pycache__/**",
+      "*.pyo",
+      "*.pyd",
+      ".Python",
+      "env/**",
+      "venv/**",
+      ".venv/**",
+      "*.egg-info/**",
+      ".pytest_cache/**",
+      ".mypy_cache/**",
+      ".tox/**",
+      ".coverage",
+      "htmlcov/**",
+      ".cache/**",
+      "*.so",
+      "*.dylib",
+      "*.dll",
+      "*.exe",
+      "*.bin",
+      "*.dat",
+      "*.db",
+      "*.sqlite",
+      "*.sqlite3"
+    ]
+  },
+  "filePath": "**/*.{js,ts,jsx,tsx,py,json,yml,yaml,md,txt,css,scss,html,xml,sh,bat,ps1,dockerfile,dockerignore,gitignore,gitattributes,editorconfig,prettierrc,eslintrc,tsconfig,webpack,babel,rollup,vite,next,package,requirements,setup,cfg,ini,toml,sql,graphql,gql,proto,proto3,thrift,avro,avsc,graphqls,prisma,sql,lock}",
+  "prompt": {
+    "template": "default"
+  }
+}
