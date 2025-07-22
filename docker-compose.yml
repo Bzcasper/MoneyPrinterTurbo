@@ -20,6 +20,11 @@ services:
       - PYTHONPATH=/MoneyPrinterTurbo
       - HOST=0.0.0.0
       - PORT=8501
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     
   api:
     build:
@@ -36,3 +41,8 @@ services:
       - PYTHONPATH=/MoneyPrinterTurbo
       - HOST=0.0.0.0
       - PORT=8080
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
