@@ -563,7 +563,7 @@ with col2:
                     
                     # Call the main generation function
                     # This would typically be done asynchronously in a real app
-                    result = tm.start_generation(task_id, params, log_received)
+                    result = tm.start(task_id, params, log_received)
                     
                     if result:
                         progress_placeholder.progress(1.0)
