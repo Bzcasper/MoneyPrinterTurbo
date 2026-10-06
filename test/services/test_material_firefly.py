@@ -45,7 +45,7 @@ class TestFireflyImageProvider(unittest.TestCase):
         self.save_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.save_dir, ignore_errors=True)
         config.app["firefly_webhook_url"] = (
-            "http://10.0.0.242:5678/webhook/firefly-provider-generate"
+            "http://localhost:5678/webhook/firefly-provider-generate"
         )
         config.app.pop("firefly_prompt_template", None)
         config.app.pop("tls_verify", None)
@@ -94,7 +94,7 @@ class TestFireflyImageProvider(unittest.TestCase):
         assert get.call_args is not None
         self.assertEqual(
             post.call_args.args[0],
-            "http://10.0.0.242:5678/webhook/firefly-provider-generate",
+            "http://localhost:5678/webhook/firefly-provider-generate",
         )
         payload = post.call_args.kwargs["json"]
         self.assertEqual(payload["media_type"], "image")
