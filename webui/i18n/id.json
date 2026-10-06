@@ -449,6 +449,19 @@
     "OFox Upstream Vendor Help": "Vendor upstream yang melayani pembuatan video OFox. BytePlus (internasional) adalah bawaan dengan kebijakan konten yang konsisten; Volcano Engine adalah vendor Tiongkok daratan; Auto membiarkan gateway OFox menyeimbangkan beban antar vendor.",
     "OFox Vendor BytePlus": "BytePlus (internasional, bawaan)",
     "OFox Vendor Volcengine": "Volcano Engine (Tiongkok daratan)",
-    "OFox Vendor Auto": "Otomatis (penyeimbangan gateway)"
+    "OFox Vendor Auto": "Otomatis (penyeimbangan gateway)",
+    "Type Beat Settings": "Pengaturan Type Beat",
+    "Beat-Length Mode": "Gunakan seluruh durasi beat",
+    "Beat-Length Mode Help": "Gunakan beat kustom yang diunggah sebagai audio utama dan durasi video.",
+    "Beat-Synced Cuts": "Potongan tersinkron beat",
+    "Noir Visual Effects": "Efek noir: kedipan, grain, vignette",
+    "Show Beat Cards": "Tampilkan kartu BPM, nada dan lisensi",
+    "Beat Title": "Judul beat",
+    "Beat BPM": "BPM beat",
+    "Beat BPM Help": "Nol mendeteksi BPM otomatis saat potongan tersinkron beat diaktifkan.",
+    "Beat Key": "Nada dasar beat",
+    "Beat Genre": "Genre beat",
+    "Beat Lease URL": "URL lisensi beat",
+    "Beat Publishing Metadata": "Judul, deskripsi dan tag beat"
   }
 }

@@ -201,3 +201,26 @@ def test_restoring_firefly_scenes_preserves_vertical_and_line_based_terms():
         assert app.session_state["content_vertical_select_en"] == "diy"
         assert app.session_state["firefly_scene_prompts_input"] is True
         assert app.session_state["video_terms"] == "\n".join(scenes)
+
+
+def test_type_beat_controls_and_restored_metadata():
+    with _running_app(_GroupedSelectHarness()) as app:
+        _select_vertical(app, "type_beat")
+        assert app.checkbox(key="beat_length_mode_input").value is True
+        assert app.checkbox(key="beat_sync_cuts_input").value is True
+        app.number_input(key="beat_bpm_input").set_value(92.0).run()
+        assert app.session_state["beat_bpm_input"] == 92.0
+        params = VideoParams(
+            video_subject="Midnight", content_vertical="type_beat",
+            video_source="firefly", video_aspect="16:9", video_concat_mode="sequential",
+            voice_name=voice.NO_VOICE_NAME, beat_length_mode=False, beat_bpm=105.0,
+            beat_key="D minor", beat_title="Nightfall", beat_overlay_cards=True,
+        )
+        app.session_state["task_restore_payload"] = {"task_id": "beat-restore", "params": params.model_dump(mode="json")}
+        app.run()
+        assert [str(item.value) for item in app.exception] == []
+        assert app.checkbox(key="beat_length_mode_input").value is False
+        assert app.checkbox(key="beat_overlay_cards_input").value is True
+        assert app.number_input(key="beat_bpm_input").value == 105.0
+        assert app.text_input(key="beat_key_input").value == "D minor"
+        assert app.text_input(key="beat_title_input").value == "Nightfall"

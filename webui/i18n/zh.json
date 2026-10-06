@@ -627,6 +627,19 @@
     "kimi_code.oauth.region_mismatch": "当前凭证属于「{authorized}」区域，但所选 API Platform 为「{selected}」。请求将按凭证区域「{authorized}」发出；如需切换区域，请重新登录。",
     "kimi_code.oauth.network_error": "无法连接 Kimi 授权服务（网络错误）。请检查网络连接后重新发起登录。",
     "kimi_code.oauth.changed": "登录状态已在其他页面变更，本次授权已停止。请按需重新登录。",
-    "kimi_code.oauth.poll_retry": "检查授权状态时网络异常，正在自动重试……"
+    "kimi_code.oauth.poll_retry": "检查授权状态时网络异常，正在自动重试……",
+    "Type Beat Settings": "Type Beat 设置",
+    "Beat-Length Mode": "使用节拍完整时长",
+    "Beat-Length Mode Help": "将上传的自定义节拍作为主音轨，并以其时长决定视频长度。",
+    "Beat-Synced Cuts": "跟随节拍切镜",
+    "Noir Visual Effects": "黑色电影效果：闪烁、颗粒、暗角",
+    "Show Beat Cards": "显示 BPM、调性和授权提示卡",
+    "Beat Title": "节拍标题",
+    "Beat BPM": "节拍 BPM",
+    "Beat BPM Help": "开启节拍切镜时，零表示自动检测 BPM。",
+    "Beat Key": "节拍调性",
+    "Beat Genre": "节拍风格",
+    "Beat Lease URL": "节拍授权链接",
+    "Beat Publishing Metadata": "节拍标题、简介和标签"
   }
 }
