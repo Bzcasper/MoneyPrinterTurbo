@@ -45,7 +45,9 @@ _DEFAULT_MATERIAL_CONCURRENCY = 1
 
 def _get_material_concurrency() -> int:
     try:
-        concurrency = int(config.app.get("material_concurrency", _DEFAULT_MATERIAL_CONCURRENCY))
+        concurrency = int(
+            config.app.get("material_concurrency", _DEFAULT_MATERIAL_CONCURRENCY)
+        )
     except (TypeError, ValueError):
         concurrency = _DEFAULT_MATERIAL_CONCURRENCY
     return max(1, min(8, concurrency))
@@ -506,9 +508,7 @@ def search_videos_pixabay(
             return []
 
         video_items = []
-        if not isinstance(response, dict) or not isinstance(
-            response.get("hits"), list
-        ):
+        if not isinstance(response, dict) or not isinstance(response.get("hits"), list):
             logger.error("pixabay video search returned an unsupported response")
             return video_items
         videos = response["hits"]
@@ -634,9 +634,7 @@ def search_videos_coverr(
         response = r.json()
         video_items: List[MaterialInfo] = []
 
-        if not isinstance(response, dict) or not isinstance(
-            response.get("hits"), list
-        ):
+        if not isinstance(response, dict) or not isinstance(response.get("hits"), list):
             logger.error("coverr video search returned an unsupported response")
             return video_items
 
@@ -1222,7 +1220,9 @@ def save_video(video_url: str, save_dir: str = "") -> str:
             duration = clip.duration
             fps = clip.fps
             if not (duration > 0 and fps > 0):
-                logger.warning(f"invalid video file: {temp_path} => invalid duration or fps")
+                logger.warning(
+                    f"invalid video file: {temp_path} => invalid duration or fps"
+                )
                 return ""
         except Exception as e:
             logger.warning(f"invalid video file: {temp_path} => {str(e)}")
@@ -1481,9 +1481,8 @@ def _parse_openai_image_response(
 
     b64_payload = entry.get("b64_json")
     if b64_payload:
-        if (
-            not isinstance(b64_payload, str)
-            or len(b64_payload) > 4 * ((OPENAI_IMAGE_MAX_BYTES + 2) // 3)
+        if not isinstance(b64_payload, str) or len(b64_payload) > 4 * (
+            (OPENAI_IMAGE_MAX_BYTES + 2) // 3
         ):
             return None, "generated image exceeds the 25 MB response limit"
         try:
@@ -1600,6 +1599,7 @@ def _request_openai_image(endpoint: str, payload: dict) -> tuple[bytes | None, s
 def _save_openai_image_file(
     image_bytes: bytes,
     save_dir: str,
+    filename_prefix: str = "openai-image",
 ) -> tuple[str, int, int]:
     """
     把生成结果规范成 PNG 落盘，返回 (路径, 宽, 高)。
@@ -1613,7 +1613,9 @@ def _save_openai_image_file(
     elif not os.path.isdir(save_dir):
         os.makedirs(save_dir, exist_ok=True)
 
-    image_path = os.path.join(save_dir, f"openai-image-{uuid.uuid4().hex[:12]}.png")
+    image_path = os.path.join(
+        save_dir, f"{filename_prefix}-{uuid.uuid4().hex[:12]}.png"
+    )
     if len(image_bytes) > OPENAI_IMAGE_MAX_BYTES:
         raise _OpenAIImageDecodeError("generated image exceeds the 25 MB limit")
 
@@ -1818,6 +1820,339 @@ def _download_videos_openai_image_on_demand(
     return video_paths
 
 
+# Adobe Firefly 文生图（经自托管 n8n 私有 Web 链路）：POST webhook，由
+# nuc 端 "Firefly Private Web Generation API" 工作流完成鉴权、fair-use
+# 预检与异步轮询，返回 presigned image_url。图片同样渲染成 local 同款
+# "缓慢放大"mp4 片段，对下游完全透明。Firefly 侧为 unlimited fair use
+# （0 积分），但单张生成耗时数分钟，仍按需逐段生成、凑够即停。
+FIREFLY_REQUEST_TIMEOUT = (30, 600)
+# 两档成片规格（与 VideoAspect.to_resolution 完全一致，保持"图 → 片段 →
+# 成片"全链路同分辨率，避免渲染阶段再放大/裁剪浪费算力丢画质）：
+# 竖屏 Shorts（YouTube Shorts / TikTok）1080x1920，横屏 YouTube 1920x1080，
+# 方形 1080x1080。
+FIREFLY_DEFAULT_SIZES = {
+    VideoAspect.portrait: (1080, 1920),
+    VideoAspect.landscape: (1920, 1080),
+    VideoAspect.square: (1080, 1080),
+}
+FIREFLY_MAX_ATTEMPTS = 2
+FIREFLY_RETRY_BACKOFF_SECONDS = 10
+
+# n8n 链路把模型名映射到 Adobe 侧的模型 ID，并返回实际使用的 model_key。
+# firefly-image-5 走 Adobe 第一方 endpoint（ landscape 可用；portrait 被
+# 工作流写死的 768x1344 挡掉，见下）；其余模型走 firefly-3p 第三方 endpoint，
+# 预检 0 积分但该 endpoint 目前持续过载。WebUI 只提供入口，不保证实时可用，
+# 失败时日志会写明 model_key / credit_cost / blocked 原因。
+FIREFLY_IMAGE_MODEL_DEFAULT = "firefly-image-5"
+FIREFLY_IMAGE_MODELS = {
+    "firefly-image-5": "Firefly Image 5",
+    "gpt-image-1": "GPT Image 1",
+    "gpt-image-1.5": "GPT Image 1.5",
+    "nano-banana-pro": "Nano Banana Pro",
+    "flux-2-pro": "FLUX 2 Pro",
+    "ideogram-3": "Ideogram 3",
+}
+
+
+def is_firefly_enabled(app_config: dict | None = None) -> bool:
+    """
+    判断 Firefly 文生图素材源是否已完成最小配置。
+
+    只需要 webhook 地址：鉴权由 n8n 工作流侧持有（user IMS 会话经
+    token-vault 定时刷新），MPT 侧不保存任何 Adobe 凭据。供任务预检和
+    WebUI 在消耗 LLM、TTS 额度前拦截缺失配置的任务。
+    """
+    app_config = config.app if app_config is None else app_config
+    return bool(str(app_config.get("firefly_webhook_url", "") or "").strip())
+
+
+def _firefly_webhook_url() -> str:
+    """
+    读取 Firefly 生成 webhook 地址，缺失时抛出带配置指引的错误。
+    """
+    webhook_url = str(config.app.get("firefly_webhook_url", "") or "").strip()
+    if not webhook_url:
+        raise ValueError(
+            "\n\n##### firefly_webhook_url is not set #####\n\n"
+            f"Please set it in the config.toml file: {config.config_file}\n"
+        )
+    return webhook_url.rstrip("/")
+
+
+def _firefly_prompt(search_term: str) -> str:
+    """
+    解析 Firefly 提示词模板。默认与 openai_image 保持同一画风，
+    可用 {term} 占位符自定义。
+    """
+    template = str(config.app.get("firefly_prompt_template", "") or "").strip()
+    if not template:
+        template = "cinematic photo of {term}, photorealistic, high detail"
+    if "{term}" in template:
+        return template.replace("{term}", search_term)
+    return f"{template} {search_term}".strip()
+
+
+def _firefly_image_model() -> str:
+    """
+    读取 Firefly 文生图模型名。留空或未配置时用 Adobe 自家的 Image 5。
+    """
+    model = str(config.app.get("firefly_image_model", "") or "").strip()
+    return model or FIREFLY_IMAGE_MODEL_DEFAULT
+
+
+def _firefly_image_size(
+    video_aspect: VideoAspect,
+) -> tuple[int, int]:
+    """
+    按视频画幅取 Firefly 请求宽高，直接使用成片规格（Shorts 1080x1920、
+    横屏 1920x1080），只保证方向正确（竖屏/横屏/方形）。
+    """
+    return FIREFLY_DEFAULT_SIZES.get(
+        VideoAspect(video_aspect), FIREFLY_DEFAULT_SIZES[VideoAspect.square]
+    )
+
+
+def _firefly_log_response(body: dict) -> str:
+    """
+    把 n8n 链路返回的计费/风控字段拼成一行可读日志，便于排查"为什么被拦"。
+    只记录模型、积分和结论，不记录 prompt 与任何凭据。
+    """
+    if not isinstance(body, dict):
+        return ""
+    parts = []
+    for key in ("model_key", "provider", "credit_cost", "usage_mode", "reason_code"):
+        value = body.get(key)
+        if value not in (None, ""):
+            parts.append(f"{key}={value}")
+    if body.get("fair_use") is not None:
+        parts.append(f"fair_use={body.get('fair_use')}")
+    if body.get("blocked"):
+        parts.append(f"blocked={body.get('blocked')}")
+    return ", ".join(parts)
+
+
+def _request_firefly_image(
+    prompt: str, width: int, height: int
+) -> tuple[bytes | None, str]:
+    """
+    经 n8n webhook 提交 Firefly 文生图并下载图片字节。
+
+    unlimited fair use 下重复提交不产生费用，允许一次重试；其它语义与
+    OpenAI 兼容通道一致：明确拒绝快速失败，图片下载失败视为"已生成但
+    拿不到产物"，抛错终止任务避免后续关键词继续等待数分钟。
+    """
+    webhook_url = _firefly_webhook_url()
+    model = _firefly_image_model()
+    failure_detail = "no request attempt was made"
+    for attempt in range(1, FIREFLY_MAX_ATTEMPTS + 1):
+        started = time.monotonic()
+        try:
+            response = requests.post(
+                webhook_url,
+                json={
+                    "prompt": prompt,
+                    "media_type": "image",
+                    "model": model,
+                    "width": width,
+                    "height": height,
+                },
+                proxies=config.proxy,
+                verify=_get_tls_verify(),
+                timeout=FIREFLY_REQUEST_TIMEOUT,
+            )
+        except Exception as e:
+            failure_detail = (
+                "firefly webhook request failed: "
+                f"error={type(e).__name__}, "
+                f"detail={_redact_request_error(e, webhook_url)}"
+            )
+        else:
+            status = int(getattr(response, "status_code", 200) or 200)
+            body = _response_json_safely(response)
+            elapsed = round(time.monotonic() - started, 1)
+            logger.info(
+                "firefly webhook responded: "
+                f"http={status}, elapsed_s={elapsed}, model={model}, "
+                f"{_firefly_log_response(body) or 'no metadata'}"
+            )
+            if status >= 400 or not isinstance(body, dict):
+                failure_detail = (
+                    f"firefly webhook HTTP {status}: "
+                    f"{_openai_image_response_message(body)}"
+                )
+            elif body.get("success") is True and isinstance(body.get("image_url"), str):
+                image_url = body["image_url"]
+                if image_url.startswith(("http://", "https://")):
+                    # presigned 地址无需鉴权；api_key 参数只用于错误脱敏。
+                    image_bytes, download_detail = _openai_image_download_bytes(
+                        image_url, ""
+                    )
+                    if image_bytes is None:
+                        return None, download_detail
+                    logger.info(
+                        "firefly image ready: "
+                        f"model={model}, bytes={len(image_bytes)}, "
+                        f"elapsed_s={elapsed}"
+                    )
+                    return image_bytes, ""
+                failure_detail = "firefly response image_url is not an http URL"
+            else:
+                failure_detail = (
+                    "firefly generation reported failure: "
+                    f"{_openai_image_response_message(body)}"
+                )
+        if attempt < FIREFLY_MAX_ATTEMPTS:
+            logger.warning(
+                "firefly image request failed, retrying: "
+                f"attempt={attempt}/{FIREFLY_MAX_ATTEMPTS}, "
+                f"detail={failure_detail}"
+            )
+            time.sleep(FIREFLY_RETRY_BACKOFF_SECONDS)
+            continue
+        return None, failure_detail
+
+    return None, failure_detail
+
+
+def generate_images_firefly(
+    search_term: str,
+    minimum_duration: int,
+    video_aspect: VideoAspect = VideoAspect.portrait,
+    save_dir: str = "",
+) -> List[MaterialInfo]:
+    """
+    用 Firefly 为一个脚本关键词生成一张图片并保存到本地。
+
+    与 generate_images_openai 保持同一签名和空列表失败约定。图片没有
+    原生时长，``duration`` 记录目标片段时长（秒），供按需下载流程核算
+    是否已经凑够配音时长。
+    """
+    aspect = VideoAspect(video_aspect)
+    clip_duration = max(int(minimum_duration), 1)
+    width, height = _firefly_image_size(aspect)
+    prompt = _firefly_prompt(search_term)
+    logger.info(
+        "generating image via firefly webhook: "
+        f"term={search_term!r}, size={width}x{height}, "
+        f"model={_firefly_image_model()}"
+    )
+    image_bytes, failure_detail = _request_firefly_image(prompt, width, height)
+    if image_bytes is None:
+        logger.error(
+            f"firefly image generation failed: term={search_term!r}, "
+            f"detail={failure_detail}"
+        )
+        return []
+
+    try:
+        image_path, img_width, img_height = _save_openai_image_file(
+            image_bytes, save_dir, filename_prefix="firefly-image"
+        )
+    except _OpenAIImageDecodeError as e:
+        # webhook 返回 200 但 body 不是图片时跳过当前关键词，而不是
+        # 中断整个任务（与 openai_image 同一约定）。
+        logger.error(
+            "firefly image response is not a decodable image, skipping term: "
+            f"term={search_term!r}, error={type(e).__name__}, detail={e}"
+        )
+        return []
+    item = MaterialInfo()
+    item.provider = "firefly"
+    item.url = image_path
+    item.duration = clip_duration
+    item.source_info = {
+        "provider": "firefly",
+        "search_term": search_term,
+        "rendition": {
+            "id": None,
+            "width": img_width,
+            "height": img_height,
+        },
+    }
+    return [item]
+
+
+def _download_videos_firefly_on_demand(
+    *,
+    task_id: str,
+    search_terms: List[str],
+    video_aspect: VideoAspect,
+    audio_duration: float,
+    max_clip_duration: int,
+    material_directory: str,
+) -> List[str]:
+    """
+    按脚本片段顺序逐张生成 Firefly 文生图素材，凑够所需总时长立即停止。
+
+    单张生成耗时数分钟（n8n 工作流内异步轮询），必须逐段生成、覆盖配音
+    时长后立即停止；也不参与 24 小时搜索缓存——产物 URL 是会过期的签名
+    地址，且复用缓存会让不同任务反复得到同一张图。
+    """
+    if not material_directory:
+        material_directory = utils.task_dir(task_id)
+
+    video_paths: List[str] = []
+    material_sources: list[dict[str, Any]] = []
+    total_duration = 0.0
+
+    try:
+        required_duration = float(audio_duration)
+    except (TypeError, ValueError):
+        required_duration = 0.0
+    if required_duration <= 0:
+        logger.warning(
+            "skip firefly image generation because required audio duration is "
+            f"not positive: duration={audio_duration}"
+        )
+        _persist_material_sources(task_id, material_sources)
+        return video_paths
+
+    for search_term in search_terms:
+        try:
+            items = generate_images_firefly(
+                search_term=search_term,
+                minimum_duration=max_clip_duration,
+                video_aspect=video_aspect,
+                save_dir=material_directory,
+            )
+        except OpenAIImagePaidResultError:
+            # 复用同一"已生成但拿不到产物则终止任务"的计费安全信号：
+            # presigned 下载失败意味着远端已受理，不能继续等待后续词。
+            _persist_material_sources(task_id, material_sources)
+            raise
+        for item in items:
+            video_file = _render_openai_image_video(item.url, max_clip_duration)
+            if not video_file:
+                _persist_material_sources(task_id, material_sources)
+                raise OpenAIImagePaidResultError(
+                    "generated image could not be rendered locally"
+                )
+            logger.info(f"image material rendered: {video_file}")
+            video_paths.append(video_file)
+            try:
+                material_sources.append(_material_source_record(item, video_file))
+            except Exception as source_error:
+                logger.warning(
+                    "failed to prepare generated material source record: "
+                    f"provider=firefly, "
+                    f"error={type(source_error).__name__}, detail={source_error}"
+                )
+            total_duration += min(max_clip_duration, item.duration)
+            if total_duration >= required_duration:
+                break
+        if total_duration >= required_duration:
+            logger.info(
+                "generated image materials cover the required duration, stop "
+                f"generating more images: generated={total_duration:.1f}s, "
+                f"required={required_duration:.1f}s"
+            )
+            break
+
+    logger.success(f"generated and rendered {len(video_paths)} image materials")
+    _persist_material_sources(task_id, material_sources)
+    return video_paths
+
+
 def _search_videos_with_cache(
     provider: str,
     search_videos: Callable[..., List[MaterialInfo]],
@@ -1948,12 +2283,14 @@ def _search_terms_in_parallel(
         thread_name_prefix="material-search",
     ) as executor:
         for search_term in search_terms:
-            futures[executor.submit(
-                logging_utils.bind_log_scope(search_videos),
-                search_term,
-                minimum_duration,
-                video_aspect,
-            )] = search_term
+            futures[
+                executor.submit(
+                    logging_utils.bind_log_scope(search_videos),
+                    search_term,
+                    minimum_duration,
+                    video_aspect,
+                )
+            ] = search_term
 
         results = []
         for future in futures:
@@ -2076,11 +2413,13 @@ def _download_materials_in_parallel(
         thread_name_prefix="material-download",
     ) as executor:
         for search_term, item in materials:
-            futures[executor.submit(
-                logging_utils.bind_log_scope(save_video),
-                item.url,
-                material_directory,
-            )] = (search_term, item)
+            futures[
+                executor.submit(
+                    logging_utils.bind_log_scope(save_video),
+                    item.url,
+                    material_directory,
+                )
+            ] = (search_term, item)
 
         downloaded = []
         for position, future in enumerate(futures, start=1):
@@ -2243,6 +2582,17 @@ def download_videos(
             max_clip_duration=max_clip_duration,
             material_directory=material_directory,
         )
+    if source == "firefly":
+        # 与 openai_image 相同的按需语义：单张生成耗时数分钟，逐段生成、
+        # 凑够配音时长立即停止；产物是会过期的签名地址，不参与搜索缓存。
+        return _download_videos_firefly_on_demand(
+            task_id=task_id,
+            search_terms=search_terms,
+            video_aspect=video_aspect,
+            audio_duration=audio_duration,
+            max_clip_duration=max_clip_duration,
+            material_directory=material_directory,
+        )
 
     if match_script_order:
         return _download_videos_by_script_order(
@@ -2308,7 +2658,7 @@ def download_videos(
             material_directory=material_directory,
             on_downloaded=on_downloaded,
         )
-        pending_items = pending_items[len(batch):]
+        pending_items = pending_items[len(batch) :]
         for _, item, saved_video_path in downloaded_materials:
             try:
                 if saved_video_path:
@@ -2683,9 +3033,7 @@ def _download_videos_muapi_on_demand(
     try:
         required_duration = float(audio_duration)
     except (TypeError, ValueError) as exc:
-        raise muapi.MuAPIError(
-            "MuAPI audio duration must be a finite number"
-        ) from exc
+        raise muapi.MuAPIError("MuAPI audio duration must be a finite number") from exc
     if not math.isfinite(required_duration):
         raise muapi.MuAPIError("MuAPI audio duration must be a finite number")
     if required_duration <= 0:
@@ -2963,18 +3311,14 @@ def _download_videos_by_script_order(
                 search_term,
                 term_items[next_candidate_indices[group_position]],
             )
-            for group_position, (search_term, term_items) in enumerate(
-                candidate_groups
-            )
+            for group_position, (search_term, term_items) in enumerate(candidate_groups)
             if next_candidate_indices[group_position] < len(term_items)
         ]
         if not round_materials:
             break
 
         selected_materials = _select_materials_until_duration(
-            materials=[
-                (search_term, item) for _, search_term, item in round_materials
-            ],
+            materials=[(search_term, item) for _, search_term, item in round_materials],
             max_clip_duration=max_clip_duration,
             audio_duration=audio_duration,
             current_duration=total_duration,
