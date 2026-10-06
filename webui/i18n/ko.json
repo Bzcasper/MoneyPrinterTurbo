@@ -462,6 +462,7 @@
     "Beat Key": "비트 조성",
     "Beat Genre": "비트 장르",
     "Beat Lease URL": "비트 라이선스 URL",
-    "Beat Publishing Metadata": "비트 제목, 설명, 태그"
+    "Beat Publishing Metadata": "비트 제목, 설명, 태그",
+    "DIY Step Visuals Help": "대본 문단마다 이미지 한 장을 해당 내레이션 동안 표시합니다. 카메라는 왼쪽 이동, 오른쪽 이동, 세로 이동, 줌 아웃을 순환합니다."
   }
 }
