@@ -46,9 +46,7 @@ _DEFAULT_MATERIAL_CONCURRENCY = 1
 
 def _get_material_concurrency() -> int:
     try:
-        concurrency = int(
-            config.app.get("material_concurrency", _DEFAULT_MATERIAL_CONCURRENCY)
-        )
+        concurrency = int(config.app.get("material_concurrency", _DEFAULT_MATERIAL_CONCURRENCY))
     except (TypeError, ValueError):
         concurrency = _DEFAULT_MATERIAL_CONCURRENCY
     return max(1, min(8, concurrency))
@@ -509,7 +507,9 @@ def search_videos_pixabay(
             return []
 
         video_items = []
-        if not isinstance(response, dict) or not isinstance(response.get("hits"), list):
+        if not isinstance(response, dict) or not isinstance(
+            response.get("hits"), list
+        ):
             logger.error("pixabay video search returned an unsupported response")
             return video_items
         videos = response["hits"]
@@ -635,7 +635,9 @@ def search_videos_coverr(
         response = r.json()
         video_items: List[MaterialInfo] = []
 
-        if not isinstance(response, dict) or not isinstance(response.get("hits"), list):
+        if not isinstance(response, dict) or not isinstance(
+            response.get("hits"), list
+        ):
             logger.error("coverr video search returned an unsupported response")
             return video_items
 
@@ -1225,9 +1227,7 @@ def save_video(video_url: str, save_dir: str = "") -> str:
             # nonempty cache entry becomes reusable by later tasks.
             material_upload._validate_video(temp_path)
             if not (duration > 0 and fps > 0):
-                logger.warning(
-                    f"invalid video file: {temp_path} => invalid duration or fps"
-                )
+                logger.warning(f"invalid video file: {temp_path} => invalid duration or fps")
                 return ""
         except Exception as e:
             logger.warning(f"invalid video file: {temp_path} => {str(e)}")
@@ -1486,8 +1486,9 @@ def _parse_openai_image_response(
 
     b64_payload = entry.get("b64_json")
     if b64_payload:
-        if not isinstance(b64_payload, str) or len(b64_payload) > 4 * (
-            (OPENAI_IMAGE_MAX_BYTES + 2) // 3
+        if (
+            not isinstance(b64_payload, str)
+            or len(b64_payload) > 4 * ((OPENAI_IMAGE_MAX_BYTES + 2) // 3)
         ):
             return None, "generated image exceeds the 25 MB response limit"
         try:
@@ -2288,14 +2289,12 @@ def _search_terms_in_parallel(
         thread_name_prefix="material-search",
     ) as executor:
         for search_term in search_terms:
-            futures[
-                executor.submit(
-                    logging_utils.bind_log_scope(search_videos),
-                    search_term,
-                    minimum_duration,
-                    video_aspect,
-                )
-            ] = search_term
+            futures[executor.submit(
+                logging_utils.bind_log_scope(search_videos),
+                search_term,
+                minimum_duration,
+                video_aspect,
+            )] = search_term
 
         results = []
         for future in futures:
@@ -2418,13 +2417,11 @@ def _download_materials_in_parallel(
         thread_name_prefix="material-download",
     ) as executor:
         for search_term, item in materials:
-            futures[
-                executor.submit(
-                    logging_utils.bind_log_scope(save_video),
-                    item.url,
-                    material_directory,
-                )
-            ] = (search_term, item)
+            futures[executor.submit(
+                logging_utils.bind_log_scope(save_video),
+                item.url,
+                material_directory,
+            )] = (search_term, item)
 
         downloaded = []
         for position, future in enumerate(futures, start=1):
@@ -2663,7 +2660,7 @@ def download_videos(
             material_directory=material_directory,
             on_downloaded=on_downloaded,
         )
-        pending_items = pending_items[len(batch) :]
+        pending_items = pending_items[len(batch):]
         for _, item, saved_video_path in downloaded_materials:
             try:
                 if saved_video_path:
@@ -3038,7 +3035,9 @@ def _download_videos_muapi_on_demand(
     try:
         required_duration = float(audio_duration)
     except (TypeError, ValueError) as exc:
-        raise muapi.MuAPIError("MuAPI audio duration must be a finite number") from exc
+        raise muapi.MuAPIError(
+            "MuAPI audio duration must be a finite number"
+        ) from exc
     if not math.isfinite(required_duration):
         raise muapi.MuAPIError("MuAPI audio duration must be a finite number")
     if required_duration <= 0:
@@ -3316,14 +3315,18 @@ def _download_videos_by_script_order(
                 search_term,
                 term_items[next_candidate_indices[group_position]],
             )
-            for group_position, (search_term, term_items) in enumerate(candidate_groups)
+            for group_position, (search_term, term_items) in enumerate(
+                candidate_groups
+            )
             if next_candidate_indices[group_position] < len(term_items)
         ]
         if not round_materials:
             break
 
         selected_materials = _select_materials_until_duration(
-            materials=[(search_term, item) for _, search_term, item in round_materials],
+            materials=[
+                (search_term, item) for _, search_term, item in round_materials
+            ],
             max_clip_duration=max_clip_duration,
             audio_duration=audio_duration,
             current_duration=total_duration,
