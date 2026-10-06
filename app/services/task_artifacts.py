@@ -104,3 +104,43 @@ def patch_script_data(task_id: str, **updates: Any) -> bool:
             f"error={type(exc).__name__}, detail={exc}"
         )
         return False
+
+def read_firefly_image_manifest(task_id: str) -> dict[str, str]:
+    """Read only this task's saved image paths; never consult another task."""
+    if not task_id:
+        return {}
+    with _script_lock(task_id):
+        target = Path(utils.task_dir(task_id)) / "firefly-images.json"
+        try:
+            with target.open("r", encoding="utf-8") as manifest_file:
+                payload = json.load(manifest_file)
+            if not isinstance(payload, dict) or payload.get("task_id") != task_id:
+                raise ValueError("Firefly image manifest does not belong to this task")
+            images = payload.get("images")
+            if not isinstance(images, dict):
+                raise ValueError("Firefly image manifest must contain an image mapping")
+            return {
+                key: value for key, value in images.items()
+                if isinstance(key, str) and len(key) == 64
+                and all(char in "0123456789abcdef" for char in key)
+                and isinstance(value, str) and value
+            }
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError, TypeError) as exc:
+            logger.warning(
+                "ignoring invalid task Firefly image manifest: "
+                f"task_id={task_id}, error={type(exc).__name__}"
+            )
+            return {}
+
+
+def record_firefly_image(task_id: str, cache_key: str, image_path: str) -> None:
+    """Atomically merge a saved PNG before rendering can fail."""
+    if not task_id or len(cache_key) != 64 or any(char not in "0123456789abcdef" for char in cache_key):
+        raise ValueError("a task ID and SHA-256 image key are required")
+    with _script_lock(task_id):
+        target = Path(utils.task_dir(task_id)) / "firefly-images.json"
+        images = read_firefly_image_manifest(task_id)
+        images[cache_key] = str(Path(image_path).resolve())
+        _write_json_atomic(target, {"task_id": task_id, "images": images})
