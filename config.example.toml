@@ -211,7 +211,7 @@ openai_image_prompt_template = ""
 # generated through a self-hosted n8n webhook ("Firefly Private Web
 # Generation API" workflow) which holds the Adobe user session, runs the
 # fair-use preflight, and polls the async job. Set the full webhook URL,
-# for example "http://10.0.0.242:5678/webhook/firefly-provider-generate".
+# for example "http://localhost:5678/webhook/firefly-provider-generate".
 # Like openai_image, images are generated on demand (one per script keyword)
 # and rendered into short zoom-effect video clips. Firefly fair use is
 # currently unlimited (0 credits), but each image takes minutes to generate.

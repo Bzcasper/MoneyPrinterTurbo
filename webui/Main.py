@@ -4091,7 +4091,7 @@ def _render_settings_dialog():
                 firefly_webhook_url = st.text_input(
                     tr("Firefly Webhook URL"),
                     value=str(config.app.get("firefly_webhook_url", "") or ""),
-                    placeholder="http://10.0.0.242:5678/webhook/firefly-provider-generate",
+                    placeholder="http://localhost:5678/webhook/firefly-provider-generate",
                     help=tr("Firefly Webhook URL Help"),
                     key="firefly_webhook_url_input",
                 )

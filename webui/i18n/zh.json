@@ -477,7 +477,7 @@
     "Firefly Text-to-Image": "Adobe Firefly 文生图",
     "Firefly Text-to-Image Help": "经自托管 n8n 链路调用 Adobe Firefly 生成图片（unlimited fair use，单张耗时数分钟）。鉴权由 n8n 工作流持有。",
     "Firefly Webhook URL": "Firefly Webhook 地址",
-    "Firefly Webhook URL Help": "n8n Firefly 链路的完整 webhook 地址，例如 http://10.0.0.242:5678/webhook/firefly-provider-generate",
+    "Firefly Webhook URL Help": "n8n Firefly 链路的完整 webhook 地址，例如 http://localhost:5678/webhook/firefly-provider-generate",
     "Firefly Advanced Settings": "Firefly 高级设置",
     "Firefly Image Model": "Firefly 图片模型",
     "Firefly Image Model Help": "向 n8n 链路请求的文生图模型。仅列出已在 unlimited fair use（0 积分）下验证通过的模型；其它 Adobe 模型可能消耗积分。",
