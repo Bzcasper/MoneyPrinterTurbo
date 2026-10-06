@@ -1535,6 +1535,20 @@ def _run_pipeline(
             "optional for local gateways that need no auth)",
         )
 
+    if (
+        stop_at in {"materials", "video"}
+        and params.video_source == "firefly"
+        and not material.is_firefly_enabled(
+            config.snapshot_config_with_pending(config.app)
+        )
+    ):
+        return _mark_task_failed(
+            task_id,
+            "preflight",
+            "Firefly image source requires firefly_webhook_url in "
+            "config.toml (the n8n Firefly provider webhook)",
+        )
+
     # 只有完整成片流程需要视频配乐供应商。尽早阻止缺少 Key 的完整任务，避免
     # 先消耗 LLM、TTS 和素材服务额度；中间产物接口仍可独立使用。
     video_music_provider = _VIDEO_MUSIC_PROVIDERS.get(params.bgm_type)

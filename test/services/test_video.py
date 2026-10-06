@@ -114,7 +114,9 @@ class TestVideoService(unittest.TestCase):
                     patch.object(vd, "_open_video_clip_quietly") as open_video,
                 ):
                     params = vd.VideoParams(video_subject="Coffee", font_name=font_name)
-                    with self.assertRaisesRegex(ValueError, "outside the allowed directory"):
+                    with self.assertRaisesRegex(
+                        ValueError, "outside the allowed directory"
+                    ):
                         vd.generate_video(
                             video_path="unused.mp4",
                             audio_path="unused.mp3",
@@ -160,15 +162,13 @@ class TestVideoService(unittest.TestCase):
             initial_color = vd.np.any(animated.get_frame(0) > 0, axis=2)
             initial_mask = animated.mask.get_frame(0) > 0
             vd.np.testing.assert_array_equal(initial_color, initial_mask)
-            self.assertLess(initial_color.sum(), color_frame.shape[0] * color_frame.shape[1])
+            self.assertLess(
+                initial_color.sum(), color_frame.shape[0] * color_frame.shape[1]
+            )
 
             # 动画结束后必须精确恢复原始尺寸，避免长字幕持续模糊或缩放。
-            settled_color = animated.get_frame(
-                vd._SUBTITLE_SPRING_DURATION_SECONDS
-            )
-            settled_mask = animated.mask.get_frame(
-                vd._SUBTITLE_SPRING_DURATION_SECONDS
-            )
+            settled_color = animated.get_frame(vd._SUBTITLE_SPRING_DURATION_SECONDS)
+            settled_mask = animated.mask.get_frame(vd._SUBTITLE_SPRING_DURATION_SECONDS)
             vd.np.testing.assert_array_equal(settled_color, color_frame)
             vd.np.testing.assert_array_equal(settled_mask, mask_frame)
         finally:
@@ -298,16 +298,21 @@ class TestVideoService(unittest.TestCase):
             with (
                 patch.object(vd, "_open_video_clip_quietly", return_value=source_video),
                 patch.object(vd, "AudioFileClip", return_value=voice_source),
-                patch.object(vd, "SubtitlesClip", side_effect=AssertionError(
-                    "disabled subtitles must not be parsed"
-                )) as subtitle_loader,
+                patch.object(
+                    vd,
+                    "SubtitlesClip",
+                    side_effect=AssertionError("disabled subtitles must not be parsed"),
+                ) as subtitle_loader,
                 patch.object(vd, "TextClip") as text_renderer,
                 patch.object(vd, "_write_videofile_with_codec_fallback") as writer,
                 patch.object(vd, "_get_configured_video_codec", return_value="libx264"),
             ):
                 result = vd.generate_video(
-                    video_path="combined.mp4", audio_path="voice.mp3",
-                    subtitle_path=str(stale_subtitle), output_file="final.mp4", params=params,
+                    video_path="combined.mp4",
+                    audio_path="voice.mp3",
+                    subtitle_path=str(stale_subtitle),
+                    output_file="final.mp4",
+                    params=params,
                 )
         self.assertTrue(result)
         subtitle_loader.assert_not_called()
@@ -331,12 +336,8 @@ class TestVideoService(unittest.TestCase):
         source_video.with_audio_result = final_video
 
         with (
-            patch.object(
-                vd, "_open_video_clip_quietly", return_value=source_video
-            ),
-            patch.object(
-                vd, "AudioFileClip", side_effect=[voice_source, bgm_source]
-            ),
+            patch.object(vd, "_open_video_clip_quietly", return_value=source_video),
+            patch.object(vd, "AudioFileClip", side_effect=[voice_source, bgm_source]),
             patch.object(vd, "CompositeAudioClip", return_value=mixed_audio),
             patch.object(vd, "_write_videofile_with_codec_fallback") as writer,
             patch.object(vd, "_get_configured_video_codec", return_value="libx264"),
@@ -372,9 +373,7 @@ class TestVideoService(unittest.TestCase):
         source_video.with_audio_result = final_video
 
         with (
-            patch.object(
-                vd, "_open_video_clip_quietly", return_value=source_video
-            ),
+            patch.object(vd, "_open_video_clip_quietly", return_value=source_video),
             patch.object(
                 vd,
                 "AudioFileClip",
@@ -435,9 +434,7 @@ class TestVideoService(unittest.TestCase):
                     ) as audio_file_clip,
                     patch.object(vd, "get_bgm_file") as get_bgm_file,
                     patch.object(vd, "CompositeAudioClip") as composite_audio,
-                    patch.object(
-                        vd, "_write_videofile_with_codec_fallback"
-                    ) as writer,
+                    patch.object(vd, "_write_videofile_with_codec_fallback") as writer,
                     patch.object(
                         vd, "_get_configured_video_codec", return_value="libx264"
                     ),
@@ -557,6 +554,7 @@ class TestVideoService(unittest.TestCase):
 
     def test_image_zoom_renders_keep_distinct_clip_durations(self):
         """Two tasks must not overwrite one image render with another duration."""
+
         class FakeImageClip:
             def __init__(self, _path):
                 self.duration = 0
@@ -593,6 +591,7 @@ class TestVideoService(unittest.TestCase):
 
     def test_failed_image_zoom_render_preserves_previous_complete_clip(self):
         """A failed rerender must leave the last verified MP4 available."""
+
         class FakeImageClip:
             duration = 0
 
@@ -637,6 +636,53 @@ class TestVideoService(unittest.TestCase):
                 sorted(path.name for path in Path(temp_dir).iterdir()),
                 ["image.png.zoom-5.mp4"],
             )
+
+    def test_ffmpeg_zoompan_render_publishes_complete_clip(self):
+        """zoompan 路径必须经过临时文件原子发布，且滤镜链包含平滑参数。"""
+        commands = []
+
+        def fake_run(command, **_kwargs):
+            commands.append(command)
+            Path(command[-1]).write_bytes(b"zoompan-complete")
+            return subprocess.CompletedProcess(command, 0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = os.path.join(temp_dir, "image.png")
+            Path(image_path).write_bytes(b"fake-png")
+            with (
+                patch.object(vd, "_probe_image_size", return_value=(64, 48)),
+                patch.object(vd.subprocess, "run", side_effect=fake_run),
+            ):
+                output = vd._render_image_zoom_video_ffmpeg(image_path, 4)
+
+            self.assertEqual(Path(output).read_bytes(), b"zoompan-complete")
+            self.assertTrue(output.endswith(".zoom-4.mp4"))
+            vf = commands[0][commands[0].index("-vf") + 1]
+            self.assertIn("zoompan=", vf)
+            self.assertIn("fps=30", vf)
+            self.assertNotIn(".image-zoom-", os.path.basename(output))
+
+    def test_zoom_render_falls_back_to_moviepy_when_ffmpeg_fails(self):
+        """ffmpeg 不可用时必须回退 MoviePy，而不是让任务直接失败。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = os.path.join(temp_dir, "image.png")
+            Path(image_path).write_bytes(b"fake-png")
+            with (
+                patch.object(
+                    vd.subprocess,
+                    "run",
+                    side_effect=subprocess.CalledProcessError(1, "ffmpeg"),
+                ),
+                patch.object(
+                    vd,
+                    "_render_image_zoom_video_moviepy",
+                    return_value=os.path.join(temp_dir, "fallback.mp4"),
+                ) as fallback,
+            ):
+                output = vd.render_image_zoom_video(image_path, clip_duration=5)
+
+            fallback.assert_called_once_with(image_path, 5)
+            self.assertTrue(output.endswith("fallback.mp4"))
 
     def test_preprocess_video_rejects_material_outside_local_videos(self):
         """
@@ -693,7 +739,9 @@ class TestVideoService(unittest.TestCase):
 
     def test_get_ffmpeg_binary_uses_configured_env_path(self):
         """配置中显式指定 ffmpeg 时，应优先使用该路径。"""
-        with patch.dict(os.environ, {"IMAGEIO_FFMPEG_EXE": "/tmp/custom-ffmpeg"}, clear=True):
+        with patch.dict(
+            os.environ, {"IMAGEIO_FFMPEG_EXE": "/tmp/custom-ffmpeg"}, clear=True
+        ):
             self.assertEqual(utils.get_ffmpeg_binary(), "/tmp/custom-ffmpeg")
 
     def test_get_ffmpeg_binary_falls_back_to_imageio_ffmpeg(self):
@@ -705,9 +753,11 @@ class TestVideoService(unittest.TestCase):
             get_ffmpeg_exe=lambda: "/tmp/bundled-ffmpeg"
         )
 
-        with patch.dict(os.environ, {}, clear=True), patch.object(
-            utils.shutil, "which", return_value=None
-        ), patch.dict(sys.modules, {"imageio_ffmpeg": fake_imageio_ffmpeg}):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(utils.shutil, "which", return_value=None),
+            patch.dict(sys.modules, {"imageio_ffmpeg": fake_imageio_ffmpeg}),
+        ):
             self.assertEqual(utils.get_ffmpeg_binary(), "/tmp/bundled-ffmpeg")
 
     def test_get_effective_video_codec_falls_back_when_encoder_missing(self):
@@ -748,7 +798,9 @@ class TestVideoService(unittest.TestCase):
             "run",
             side_effect=OSError("permission denied"),
         ):
-            self.assertFalse(vd._ffmpeg_encoder_exists("C:/ffmpeg/bin/ffmpeg.exe", "h264_nvenc"))
+            self.assertFalse(
+                vd._ffmpeg_encoder_exists("C:/ffmpeg/bin/ffmpeg.exe", "h264_nvenc")
+            )
 
     def test_write_videofile_falls_back_after_runtime_encoder_failure(self):
         """
@@ -859,9 +911,7 @@ class TestVideoService(unittest.TestCase):
             return_value=r"C:\Users\Test User's Videos\clip.mp4",
         ):
             self.assertEqual(
-                vd._format_ffmpeg_concat_path(
-                    r"C:\Users\Test User's Videos\clip.mp4"
-                ),
+                vd._format_ffmpeg_concat_path(r"C:\Users\Test User's Videos\clip.mp4"),
                 "C:/Users/Test User'\\''s Videos/clip.mp4",
             )
 
@@ -899,8 +949,7 @@ class TestVideoService(unittest.TestCase):
                     )
 
         used_codecs = [
-            call.args[0][call.args[0].index("-c:v") + 1]
-            for call in run.call_args_list
+            call.args[0][call.args[0].index("-c:v") + 1] for call in run.call_args_list
         ]
         self.assertEqual(used_codecs, ["h264_nvenc", "libx264"])
         self.assertIn("h264_nvenc", vd._runtime_disabled_video_codecs)
@@ -1011,6 +1060,7 @@ class TestVideoService(unittest.TestCase):
         Ensure `combine_videos` safely handles
         `video_transition_mode=None`.
         """
+
         class _FakeAudioClip:
             @property
             def duration(self):
@@ -1184,7 +1234,9 @@ class TestVideoService(unittest.TestCase):
                     with patch.object(
                         vd, "_write_videofile_with_codec_fallback"
                     ) as write_mock:
-                        with patch.object(vd, "concat_video_clips_with_ffmpeg") as concat_mock:
+                        with patch.object(
+                            vd, "concat_video_clips_with_ffmpeg"
+                        ) as concat_mock:
                             with patch.object(vd, "delete_files"):
                                 result = vd.combine_videos(
                                     combined_video_path=combined_video_path,
@@ -1222,7 +1274,9 @@ class TestVideoService(unittest.TestCase):
             output_file = os.path.join(temp_dir, "combined.mp4")
             with (
                 patch.object(vd, "AudioFileClip", return_value=FakeAudioClip()),
-                patch.object(vd, "_open_video_clip_quietly", return_value=FakeVideoClip()),
+                patch.object(
+                    vd, "_open_video_clip_quietly", return_value=FakeVideoClip()
+                ),
                 patch.object(
                     vd, "_write_videofile_with_codec_fallback", side_effect=write_clip
                 ),
@@ -1302,6 +1356,7 @@ class TestVideoService(unittest.TestCase):
 
     def test_combine_videos_skips_unreadable_source_when_good_clip_remains(self):
         """A stale corrupt cache clip must not discard healthy downloaded footage."""
+
         class FakeAudioClip:
             duration = 0.5
 
@@ -1341,6 +1396,7 @@ class TestVideoService(unittest.TestCase):
 
     def test_combine_videos_reports_failure_if_every_source_is_unreadable(self):
         """Never return an output path for an input set that yielded no clips."""
+
         class FakeAudioClip:
             duration = 1.0
 
@@ -1629,11 +1685,7 @@ class TestVideoService(unittest.TestCase):
         self.assertEqual(result, combined_video_path)
         concat.assert_called_once()
         self.assertTrue(
-            [
-                call
-                for call in warning.call_args_list
-                if "progress" in str(call.args[0])
-            ]
+            [call for call in warning.call_args_list if "progress" in str(call.args[0])]
         )
 
     def test_stage_heartbeat_logs_while_running_and_stops_afterwards(self):
@@ -1647,9 +1699,7 @@ class TestVideoService(unittest.TestCase):
         ):
             with vd._stage_heartbeat("final video render"):
                 time.sleep(0.2)
-            heartbeats_at_exit = len(
-                [m for m in messages if "still running" in m]
-            )
+            heartbeats_at_exit = len([m for m in messages if "still running" in m])
             time.sleep(0.1)
             heartbeats_later = len([m for m in messages if "still running" in m])
 
@@ -1721,7 +1771,9 @@ class TestVideoService(unittest.TestCase):
             Path(clip_file).write_bytes(b"fake")
 
             with patch.object(vd, "_ffmpeg_encoder_exists", return_value=True):
-                with patch.object(vd.subprocess, "run", side_effect=timed_out_run) as run:
+                with patch.object(
+                    vd.subprocess, "run", side_effect=timed_out_run
+                ) as run:
                     with self.assertRaisesRegex(TimeoutError, "12 seconds"):
                         vd.concat_video_clips_with_ffmpeg(
                             clip_files=[clip_file],
@@ -1795,15 +1847,9 @@ class TestVideoService(unittest.TestCase):
         同一个源素材的最后一个切片可能短于目标片段时长。首轮去重时应优先
         选择较长片段，否则会因为累计时长不足而提前复用素材。
         """
-        short_tail = vd.SubClippedVideoClip(
-            "a.mp4", 6, 6.5, source_file_path="a.mp4"
-        )
-        full_clip = vd.SubClippedVideoClip(
-            "a.mp4", 0, 3, source_file_path="a.mp4"
-        )
-        other_source = vd.SubClippedVideoClip(
-            "b.mp4", 0, 3, source_file_path="b.mp4"
-        )
+        short_tail = vd.SubClippedVideoClip("a.mp4", 6, 6.5, source_file_path="a.mp4")
+        full_clip = vd.SubClippedVideoClip("a.mp4", 0, 3, source_file_path="a.mp4")
+        other_source = vd.SubClippedVideoClip("b.mp4", 0, 3, source_file_path="b.mp4")
 
         ordered_clips = vd._prioritize_unique_source_clips(
             subclipped_items=[short_tail, full_clip, other_source],
@@ -1814,35 +1860,33 @@ class TestVideoService(unittest.TestCase):
             clip for clip in ordered_clips if clip.source_file_path == "a.mp4"
         )
         self.assertEqual(first_a_clip, full_clip)
-    
+
     def test_wrap_text(self):
         """test text wrapping function"""
         try:
             font_path = os.path.join(utils.font_dir(), "STHeitiMedium.ttc")
             if not os.path.exists(font_path):
                 self.fail(f"font file not found: {font_path}")
-                
+
             # test english text wrapping
-            test_text_en = "This is a test text for wrapping long sentences in english language"
-            
+            test_text_en = (
+                "This is a test text for wrapping long sentences in english language"
+            )
+
             wrapped_text_en, text_height_en = vd.wrap_text(
-                text=test_text_en,
-                max_width=300,
-                font=font_path,
-                fontsize=30
+                text=test_text_en, max_width=300, font=font_path, fontsize=30
             )
             print(wrapped_text_en, text_height_en)
             # verify text is wrapped
             self.assertIn("\n", wrapped_text_en)
-            
+
             # test chinese text wrapping
-            test_text_zh = "这是一段用来测试中文长句换行的文本内容，应该会根据宽度限制进行换行处理"
+            test_text_zh = (
+                "这是一段用来测试中文长句换行的文本内容，应该会根据宽度限制进行换行处理"
+            )
             wrapped_text_zh, text_height_zh = vd.wrap_text(
-                text=test_text_zh,
-                max_width=300,
-                font=font_path,
-                fontsize=30
-            )   
+                text=test_text_zh, max_width=300, font=font_path, fontsize=30
+            )
             print(wrapped_text_zh, text_height_zh)
             # verify chinese text is wrapped
             self.assertIn("\n", wrapped_text_zh)
