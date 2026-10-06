@@ -468,6 +468,16 @@
     "Publishing Title Template": "Modelo de título",
     "Publishing Description Template": "Modelo de descrição",
     "Inherit Global Privacy": "Usar privacidade global",
-    "Vertical Publishing Help": "Campos vazios usam o perfil global e os metadados gerados. Modelos: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. A privacidade se aplica ao YouTube."
+    "Vertical Publishing Help": "Campos vazios usam o perfil global e os metadados gerados. Modelos: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. A privacidade se aplica ao YouTube.",
+    "Firefly Test One Image": "Testar uma imagem Firefly",
+    "Firefly Test Image Help": "Gera uma imagem paga com um prompt curto de exemplo, o modelo e a proporção selecionados.",
+    "Firefly Testing Image": "Gerando imagem de teste...",
+    "Firefly Test Image": "Imagem de teste Firefly",
+    "Firefly Test Failed": "O teste falhou. Verifique a configuração do webhook e tente novamente.",
+    "Firefly Test Needs Webhook": "Defina a URL do webhook Firefly para testar uma imagem.",
+    "Firefly Generation Estimate": "Estimativa Firefly: {images} imagens, {minutes} minutos de geração, simultaneidade {concurrency}.",
+    "Firefly Estimate Unavailable": "A estimativa precisa de prompts de cena válidos e um por parágrafo de bricolagem.",
+    "Firefly Estimate Assumed": "A previsão assume de dois a cinco minutos por imagem até haver um teste. Não inclui roteiro, áudio, renderização e envio; filas e novas tentativas podem aumentar o tempo.",
+    "Firefly Estimate Measured": "O intervalo usa o último teste com este webhook, modelo e proporção. Não inclui roteiro, áudio, renderização e envio; filas e novas tentativas podem aumentar o tempo."
   }
 }

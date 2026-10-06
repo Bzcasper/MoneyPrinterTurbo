@@ -468,6 +468,16 @@
     "Publishing Title Template": "Templat judul",
     "Publishing Description Template": "Templat deskripsi",
     "Inherit Global Privacy": "Gunakan privasi global",
-    "Vertical Publishing Help": "Kolom kosong memakai profil global dan metadata yang dihasilkan. Templat: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Privasi berlaku untuk YouTube."
+    "Vertical Publishing Help": "Kolom kosong memakai profil global dan metadata yang dihasilkan. Templat: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Privasi berlaku untuk YouTube.",
+    "Firefly Test One Image": "Uji satu gambar Firefly",
+    "Firefly Test Image Help": "Buat satu gambar berbayar dengan prompt contoh singkat, model dan rasio aspek yang dipilih.",
+    "Firefly Testing Image": "Membuat gambar uji...",
+    "Firefly Test Image": "Gambar uji Firefly",
+    "Firefly Test Failed": "Uji gambar gagal. Periksa konfigurasi webhook dan coba lagi.",
+    "Firefly Test Needs Webhook": "Atur URL webhook Firefly untuk menguji gambar.",
+    "Firefly Generation Estimate": "Perkiraan Firefly: {images} gambar, {minutes} menit untuk pembuatan gambar, konkurensi {concurrency}.",
+    "Firefly Estimate Unavailable": "Perkiraan memerlukan prompt adegan yang valid dan satu prompt per paragraf DIY.",
+    "Firefly Estimate Assumed": "Perencanaan mengasumsikan dua hingga lima menit per gambar sampai ada hasil uji. Tidak termasuk naskah, audio, render dan unggahan; antrean serta percobaan ulang dapat menambah waktu.",
+    "Firefly Estimate Measured": "Rentang waktu memakai uji gambar terakhir dengan webhook, model dan rasio aspek ini. Tidak termasuk naskah, audio, render dan unggahan; antrean serta percobaan ulang dapat menambah waktu."
   }
 }
