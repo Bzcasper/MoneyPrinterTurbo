@@ -13,7 +13,6 @@ from unittest.mock import patch
 
 from app.models.llm_provider import LLM_PROVIDER_REGISTRY
 
-
 SKILL_SCRIPT = (
     Path(__file__).parent.parent.parent / "docs" / "skill" / "mpt_agent.py"
 )
@@ -181,6 +180,26 @@ class TestMptAgentSkill(unittest.TestCase):
                 config_path, ["--video-source", "openai_image"]
             )
 
+            self.assertEqual(missing, [])
+
+    def test_firefly_requires_only_the_webhook_url(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config = MINIMAL_CONFIG.replace(
+                'moonshot_api_key = ""', 'moonshot_api_key = "configured"'
+            )
+            config_path.write_text(config, encoding="utf-8")
+            _, missing = mpt_agent.missing_config(
+                config_path, ["--video-source", "firefly"]
+            )
+            self.assertEqual(missing, ["firefly_webhook_url"])
+            config_path.write_text(
+                config + '\nfirefly_webhook_url = "http://127.0.0.1:5678/webhook/firefly"\n',
+                encoding="utf-8",
+            )
+            _, missing = mpt_agent.missing_config(
+                config_path, ["--video-source", "firefly"]
+            )
             self.assertEqual(missing, [])
 
     def test_missing_openai_image_inputs_report_endpoint_and_model(self):

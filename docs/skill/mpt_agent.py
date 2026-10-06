@@ -15,9 +15,8 @@ import urllib.error
 import urllib.request
 import uuid
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 PROJECT_ARCHIVE_URL = (
     "https://github.com/harry0703/MoneyPrinterTurbo/archive/refs/heads/main.zip"
@@ -37,6 +36,7 @@ SUPPORTED_SOURCES = {
     # Keep this list aligned with ``_CLI_VIDEO_SOURCES`` in cli.py. A source that
     # the CLI accepts must not be rejected here as unsupported.
     "openai_image",
+    "firefly",
     "local",
 }
 VOLCENGINE_ARK_API_KEY_URL = (
@@ -148,10 +148,12 @@ def ensure_project(root: Path) -> None:
             PROJECT_ARCHIVE_URL,
             headers={"User-Agent": "MoneyPrinterTurbo-Agent-Skill"},
         )
-        with urllib.request.urlopen(request, timeout=120) as response:
-            # Stream the archive to avoid holding a second full copy in memory.
-            with archive_path.open("wb") as archive_file:
-                shutil.copyfileobj(response, archive_file)
+        # Stream the archive to avoid holding a second full copy in memory.
+        with (
+            urllib.request.urlopen(request, timeout=120) as response,
+            archive_path.open("wb") as archive_file,
+        ):
+            shutil.copyfileobj(response, archive_file)
         with zipfile.ZipFile(archive_path) as archive:
             _safe_extract(archive, temp_dir)
 
@@ -424,6 +426,9 @@ def missing_config(config_path: Path, cli_args: list[str]) -> tuple[str, list[st
         for field in ("openai_image_base_url", "openai_image_model"):
             if not _has_configured_value(_plain_config_value(text, field)):
                 missing.append(field)
+    elif source == "firefly":
+        if not _has_configured_value(_plain_config_value(text, "firefly_webhook_url")):
+            missing.append("firefly_webhook_url")
     elif source != "local":
         value = _plain_config_value(text, f"{source}_api_keys")
         if not _has_configured_value(value):
@@ -596,7 +601,7 @@ def write_result_manifest(root: Path, payload: dict[str, object]) -> Path:
     result_path = result_manifest_path(root)
     result_path.parent.mkdir(parents=True, exist_ok=True)
     data = {
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
         **payload,
     }
     unique_suffix = str(uuid.uuid4()).replace("-", "")
