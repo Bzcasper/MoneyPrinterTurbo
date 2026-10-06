@@ -1,15 +1,24 @@
+<<<<<<< HEAD
 import hashlib
+=======
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
 # -*- coding: utf-8 -*-
 import io
 import os
 import shutil
 import tempfile
+<<<<<<< HEAD
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import quote, quote_plus
+=======
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
 
 from PIL import Image
 
@@ -49,11 +58,17 @@ class TestFireflyImageProvider(unittest.TestCase):
         self.save_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.save_dir, ignore_errors=True)
         config.app["firefly_webhook_url"] = (
+<<<<<<< HEAD
             "http://localhost:5678/webhook/firefly-provider-generate"
         )
         config.app.pop("firefly_prompt_template", None)
         config.app.pop("firefly_webhook_token", None)
         config.app.pop("firefly_concurrency", None)
+=======
+            "http://10.0.0.242:5678/webhook/firefly-provider-generate"
+        )
+        config.app.pop("firefly_prompt_template", None)
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
         config.app.pop("tls_verify", None)
         config.proxy.clear()
 
@@ -100,10 +115,15 @@ class TestFireflyImageProvider(unittest.TestCase):
         assert get.call_args is not None
         self.assertEqual(
             post.call_args.args[0],
+<<<<<<< HEAD
             "http://localhost:5678/webhook/firefly-provider-generate",
         )
         self.assertNotIn("headers", post.call_args.kwargs)
         self.assertNotIn("Authorization", get.call_args.kwargs["headers"])
+=======
+            "http://10.0.0.242:5678/webhook/firefly-provider-generate",
+        )
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
         payload = post.call_args.kwargs["json"]
         self.assertEqual(payload["media_type"], "image")
         self.assertEqual((payload["width"], payload["height"]), (1080, 1920))
@@ -121,6 +141,7 @@ class TestFireflyImageProvider(unittest.TestCase):
             {"id": None, "width": 200, "height": 300},
         )
 
+<<<<<<< HEAD
     def test_firefly_token_is_sent_only_to_webhook(self):
         config.app["firefly_webhook_token"] = "  example-firefly-token  "
         response = _webhook_response({
@@ -204,6 +225,8 @@ class TestFireflyImageProvider(unittest.TestCase):
         output = str(error.exception) + " ".join(str(call.args) for call in log.mock_calls)
         self.assertNotIn(token, output)
 
+=======
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
     def test_generate_images_firefly_failure_skips_term(self):
         """明确拒绝必须按素材源约定返回空列表，不能中断任务。"""
         response = _webhook_response(
@@ -337,6 +360,7 @@ class TestFireflyImageProvider(unittest.TestCase):
         self.assertEqual(paths, [])
 
 
+<<<<<<< HEAD
     def _firefly_test_item(self, term):
         return material.MaterialInfo(
             provider="firefly",
@@ -690,5 +714,7 @@ class TestFireflyImageProvider(unittest.TestCase):
         persist.assert_called_once_with("cache-write-error", [])
         self.assertEqual(len([name for name in os.listdir(self.save_dir) if name.endswith(".png")]), 1)
 
+=======
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
 if __name__ == "__main__":
     unittest.main()

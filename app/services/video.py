@@ -46,6 +46,7 @@ from app.services.utils import video_effects
 from app.utils import file_security, logging_utils, utils
 from app.utils.subtitle_reader import moviepy_subtitles
 
+
 class SubClippedVideoClip:
     def __init__(
         self,
@@ -94,10 +95,14 @@ _CLIP_PROCESSING_CONCURRENCY = 1
 
 def _get_clip_processing_concurrency() -> int:
     try:
-        concurrency = int(config.app.get("video_clip_concurrency", _CLIP_PROCESSING_CONCURRENCY))
+        concurrency = int(
+            config.app.get("video_clip_concurrency", _CLIP_PROCESSING_CONCURRENCY)
+        )
     except (TypeError, ValueError):
         concurrency = _CLIP_PROCESSING_CONCURRENCY
     return max(1, min(8, concurrency))
+
+
 _DEFAULT_VIDEO_CODEC = "libx264"
 # ffmpeg 串联片段期间没有阶段日志，`subprocess.run` 又阻塞到进程退出，耗时拼接在
 # 日志上表现为“无输出”。这里按间隔记录存活信息，便于区分编码中与已经卡死。
@@ -135,7 +140,10 @@ _DEFAULT_ENCODE_THREADS = min(8, os.cpu_count() or 4)
 # 中间产物（zoom 片段等一定会被再次转码）用 veryfast：编码快数倍，
 # 同 CRF 下画质差异在二次编码后可忽略；最终成片保持默认 preset 不降质。
 _INTERMEDIATE_ENCODE_PRESET = "veryfast"
+<<<<<<< HEAD
 _IMAGE_CAMERA_MOVES = ("pan-left", "pan-right", "tilt", "zoom-out")
+=======
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
 
 
 def _get_subtitle_spring_scale(time_seconds: float, duration_seconds: float) -> float:
@@ -170,9 +178,7 @@ def _scale_subtitle_frame_on_canvas(frame: np.ndarray, scale: float) -> np.ndarr
     if frame.ndim == 2:
         # MoviePy 蒙版使用 0～1 浮点数，Pillow 的 L 模式使用 0～255；转换后
         # 再恢复原始类型和范围，确保 CompositeVideoClip 的透明度语义不变。
-        mask_image = Image.fromarray(
-            np.clip(frame * 255.0, 0, 255).astype(np.uint8)
-        )
+        mask_image = Image.fromarray(np.clip(frame * 255.0, 0, 255).astype(np.uint8))
         resized_mask = mask_image.resize(
             (scaled_width, scaled_height),
             Image.Resampling.BILINEAR,
@@ -427,7 +433,9 @@ def _get_temp_audio_dir(output_dir: str) -> str:
     return output_dir
 
 
-def _fallback_write_videofile(clip, output_file: str, failed_codec: str, reason: str, **kwargs):
+def _fallback_write_videofile(
+    clip, output_file: str, failed_codec: str, reason: str, **kwargs
+):
     """
     硬件编码失败后用 libx264 重试，只有重试成功才禁用该硬件编码器。
 
@@ -645,8 +653,12 @@ def concat_video_clips_with_ffmpeg(
     concat_list_file = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix="ffmpeg-concat-", suffix=".txt",
-            dir=output_dir, delete=False,
+            mode="w",
+            encoding="utf-8",
+            prefix="ffmpeg-concat-",
+            suffix=".txt",
+            dir=output_dir,
+            delete=False,
         ) as fp:
             concat_list_file = fp.name
             for clip_file in clip_files:
@@ -825,29 +837,29 @@ def close_clip(clip):
 
     try:
         # close main resources
-        if hasattr(clip, 'reader') and clip.reader is not None:
+        if hasattr(clip, "reader") and clip.reader is not None:
             clip.reader.close()
 
         # close audio resources
-        if hasattr(clip, 'audio') and clip.audio is not None:
-            if hasattr(clip.audio, 'reader') and clip.audio.reader is not None:
+        if hasattr(clip, "audio") and clip.audio is not None:
+            if hasattr(clip.audio, "reader") and clip.audio.reader is not None:
                 clip.audio.reader.close()
             del clip.audio
 
         # close mask resources
-        if hasattr(clip, 'mask') and clip.mask is not None:
-            if hasattr(clip.mask, 'reader') and clip.mask.reader is not None:
+        if hasattr(clip, "mask") and clip.mask is not None:
+            if hasattr(clip.mask, "reader") and clip.mask.reader is not None:
                 clip.mask.reader.close()
             del clip.mask
 
         # handle child clips in composite clips
-        if hasattr(clip, 'clips') and clip.clips:
+        if hasattr(clip, "clips") and clip.clips:
             for child_clip in clip.clips:
                 if child_clip is not clip:  # avoid possible circular references
                     close_clip(child_clip)
 
         # clear clip list
-        if hasattr(clip, 'clips'):
+        if hasattr(clip, "clips"):
             clip.clips = []
 
     except Exception as e:
@@ -855,6 +867,7 @@ def close_clip(clip):
 
     del clip
     gc.collect()
+
 
 def delete_files(files: List[str] | str):
     if isinstance(files, str):
@@ -887,9 +900,7 @@ def get_bgm_file(bgm_type: str = "random", bgm_file: str = ""):
         except ValueError as exc:
             # API 请求里的 bgm_file 来自用户输入，只允许解析到用户 BGM 或内置
             # 歌曲目录，阻止 MoviePy 读取配置、密钥等任意服务器文件。
-            logger.warning(
-                f"reject unsafe bgm file: {bgm_file}, error: {str(exc)}"
-            )
+            logger.warning(f"reject unsafe bgm file: {bgm_file}, error: {str(exc)}")
             return ""
         return resolved_bgm_file
 
@@ -957,9 +968,9 @@ def _fit_clip_to_canvas(
     background = ColorClip(
         size=(target_width, target_height), color=(0, 0, 0)
     ).with_duration(clip.duration)
-    resized_clip = clip.resized(
-        new_size=(resized_width, resized_height)
-    ).with_position("center")
+    resized_clip = clip.resized(new_size=(resized_width, resized_height)).with_position(
+        "center"
+    )
     return CompositeVideoClip(
         [background, resized_clip], size=(target_width, target_height)
     ).with_duration(clip.duration)
@@ -1278,13 +1289,19 @@ def combine_videos(
     subclipped_items = _prioritize_unique_source_clips(
         subclipped_items=subclipped_items,
         concat_mode=video_concat_mode,
-        **({"source_usage": source_usage, "source_groups": source_groups}
-           if source_usage is not None else {}),
+        **(
+            {"source_usage": source_usage, "source_groups": source_groups}
+            if source_usage is not None
+            else {}
+        ),
     )
 
+<<<<<<< HEAD
     if cut_times is not None:
         subclipped_items = _plan_timed_clips(subclipped_items, cut_times, normalized_clip_speed)
 
+=======
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
     logger.debug(f"total subclipped items: {len(subclipped_items)}")
 
     # Add downloaded clips over and over until the duration of the audio (max_duration) has been reached
@@ -1411,7 +1428,9 @@ def combine_videos(
     process_clip_in_task_scope = logging_utils.bind_log_scope(process_one_clip)
     clip_processing_workers = 1
     if len(subclipped_items) >= 2:
-        clip_processing_workers = min(_get_clip_processing_concurrency(), len(subclipped_items))
+        clip_processing_workers = min(
+            _get_clip_processing_concurrency(), len(subclipped_items)
+        )
     with ThreadPoolExecutor(
         max_workers=clip_processing_workers,
         thread_name_prefix="clip-process",
@@ -1425,8 +1444,14 @@ def combine_videos(
             batch = []
             batch_duration = 0.0
             candidate_index = next_candidate_index
+<<<<<<< HEAD
             while candidate_index < len(subclipped_items) and (
                 strict_cut_order or batch_duration < remaining_duration
+=======
+            while (
+                candidate_index < len(subclipped_items)
+                and batch_duration < remaining_duration
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
             ):
                 subclipped_item = subclipped_items[candidate_index]
                 source_duration = subclipped_item.end_time - subclipped_item.start_time
@@ -1480,7 +1505,7 @@ def combine_videos(
         logger.info(
             f"video duration: {video_duration:.2f}s, audio duration: {audio_duration:.2f}s, "
             f"required duration: {required_video_duration:.2f}s, "
-            f"looped {len(processed_clips)-len(base_clips)} clips"
+            f"looped {len(processed_clips) - len(base_clips)} clips"
         )
 
     # merge video clips progressively, avoid loading all videos at once to avoid memory overflow
@@ -1868,10 +1893,7 @@ def generate_video(
         # 一个更保守的高度，把行间距和额外上下留白一并算进去，保证字幕
         # 背景框与文字本身都能完整渲染出来。
         clip_h = int(
-            txt_height
-            + vertical_padding
-            + (interline * line_count)
-            + stroke_padding
+            txt_height + vertical_padding + (interline * line_count) + stroke_padding
         )
 
         if rounded_bg_enabled:
@@ -1979,7 +2001,11 @@ def generate_video(
             _clip = _clip.with_position(("center", video_height * 0.95 - _clip.h))
         elif params.subtitle_position == "top":
             _clip = _clip.with_position(("center", video_height * 0.05))
-        elif params.subtitle_position in ("two_thirds_bottom", "two_thirds", "2/3_bottom"):
+        elif params.subtitle_position in (
+            "two_thirds_bottom",
+            "two_thirds",
+            "2/3_bottom",
+        ):
             # 2/3 from the bottom = 1/3 from the top: y = (video_height - _clip.h) * (1/3)
             y_two_thirds = (video_height - _clip.h) / 3.0
             _clip = _clip.with_position(("center", y_two_thirds))
@@ -2033,9 +2059,7 @@ def generate_video(
             video_clip = CompositeVideoClip([video_clip, *text_clips])
             clip_stack.callback(video_clip.close)
 
-        bgm_enabled = bgm_service.should_use_bgm(
-            params.bgm_type, params.bgm_volume
-        )
+        bgm_enabled = bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume)
         if not bgm_enabled and params.bgm_type:
             # 所有 BGM 来源共用这一条短路规则。音量不大于 0 时不能解析随机或
             # 自定义文件，也不能加载提供商返回的文件，避免无意义的 IO 和混音。
@@ -2117,9 +2141,90 @@ def _probe_image_size(image_path: str) -> tuple[int, int]:
     return width, height
 
 
+<<<<<<< HEAD
 def _render_image_zoom_video_ffmpeg(
     image_path: str, clip_duration: float, *, clip_index: int | None = None
 ) -> str:
+=======
+def _render_image_zoom_video_ffmpeg(image_path: str, clip_duration: int) -> str:
+    """
+    用 ffmpeg zoompan 实现 Ken Burns 缓慢放大（替代 MoviePy 逐帧 resize）。
+
+    MoviePy 的 ``resized(lambda t: ...)`` 每一帧都用 PIL 按浮点倍数重采样，
+    帧间取整误差表现为肉眼可见的抖动。zoompan 在滤镜内按子像素精度推进，
+    运动完全平滑。滤镜参数遵循 ffmpeg-skill 的 insert.py 做法：先把静帧
+    放大到输出尺寸的 ``upscale`` 倍再取窗口，保证放大末端仍有真实像素；
+    缩放速率与旧实现一致（每秒约 3%，5 秒片段终点 1.15 倍）。
+    """
+    duration = max(int(clip_duration), 1)
+    fps = 30
+    frames = max(1, round(duration * fps))
+    amount = 1 + duration * 0.03
+    step = (amount - 1) / frames
+    out_w, out_h = _probe_image_size(image_path)
+    upscale = max(2, math.ceil(amount))
+    big_w, big_h = out_w * upscale, out_h * upscale
+    zexpr = f"if(eq(on,0),1,min(zoom+{step:.8f},{amount:g}))"
+    vf = (
+        f"scale={big_w}:{big_h}:force_original_aspect_ratio=increase,"
+        f"crop={big_w}:{big_h},"
+        f"zoompan=z='{zexpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+        f"d={frames}:s={out_w}x{out_h}:fps={fps},"
+        "setsar=1,"
+        f"{_BT709_VIDEO_FILTER}"
+    )
+    video_file = f"{image_path}.zoom-{duration}.mp4"
+    descriptor, temp_path = tempfile.mkstemp(
+        prefix=".image-zoom-",
+        suffix=".mp4",
+        dir=os.path.dirname(os.path.abspath(video_file)),
+    )
+    os.close(descriptor)
+    try:
+        command = [
+            utils.get_ffmpeg_binary(),
+            "-y",
+            "-loop",
+            "1",
+            "-i",
+            image_path,
+            "-t",
+            f"{duration:.3f}",
+            "-vf",
+            vf,
+            "-r",
+            str(fps),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            _INTERMEDIATE_ENCODE_PRESET,
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-threads",
+            str(_DEFAULT_ENCODE_THREADS),
+            temp_path,
+        ]
+        logger.debug(
+            "rendering ken burns clip with ffmpeg zoompan: "
+            f"image={image_path}, size={out_w}x{out_h}, "
+            f"frames={frames}, amount={amount:.3f}"
+        )
+        subprocess.run(command, capture_output=True, text=True, timeout=300, check=True)
+    except Exception:
+        delete_files(temp_path)
+        raise
+    os.replace(temp_path, video_file)
+    return video_file
+
+
+def _render_image_zoom_video_moviepy(image_path: str, clip_duration: int) -> str:
+    """
+    MoviePy 兜底渲染（逐帧 resize，有轻微抖动）。仅当 ffmpeg zoompan
+    路径不可用时使用，保证极端环境下仍有片段可拼接。
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
     """
     用 ffmpeg zoompan 实现 Ken Burns 缓慢放大（替代 MoviePy 逐帧 resize）。
 
@@ -2266,9 +2371,13 @@ def _render_image_zoom_video_moviepy(image_path: str, clip_duration: int) -> str
             delete_files(temp_path)
 
 
+<<<<<<< HEAD
 def render_image_zoom_video(
     image_path: str, clip_duration: float = 5, *, clip_index: int | None = None
 ) -> str:
+=======
+def render_image_zoom_video(image_path: str, clip_duration: int = 5) -> str:
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
     """
     将单张本地图片渲染为带缓慢放大效果的 mp4 片段，返回输出文件路径。
 
@@ -2279,12 +2388,17 @@ def render_image_zoom_video(
     处理。
     """
     try:
+<<<<<<< HEAD
         camera_options = {"clip_index": clip_index} if clip_index is not None else {}
         return _render_image_zoom_video_ffmpeg(image_path, clip_duration, **camera_options)
     except Exception as e:
         if clip_index is not None:
             # Preserve the paid PNG for retry; do not substitute a different step or move.
             raise
+=======
+        return _render_image_zoom_video_ffmpeg(image_path, clip_duration)
+    except Exception as e:
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
         logger.warning(
             "ffmpeg zoompan render failed, falling back to moviepy: "
             f"image={image_path}, error={type(e).__name__}, detail={e}"

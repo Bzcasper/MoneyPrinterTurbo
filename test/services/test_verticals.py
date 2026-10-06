@@ -68,6 +68,7 @@ class TestContentVerticals(unittest.TestCase):
                 self.assertIn(aspect, valid, key)
 
 
+<<<<<<< HEAD
     def test_scene_prompts_have_required_style_and_visual_constraints(self):
         for key, suffix in (
             ("diy", "photorealistic, natural window light, clean wooden workbench, shallow depth of field, 4k"),
@@ -91,5 +92,7 @@ class TestContentVerticals(unittest.TestCase):
         self.assertIn("quoted lyrics", verticals.TYPE_BEAT_SCRIPT_PROMPT)
 
 
+=======
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
 if __name__ == "__main__":
     unittest.main()

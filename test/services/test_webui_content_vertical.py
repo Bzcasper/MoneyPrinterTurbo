@@ -8,8 +8,12 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from app.config import config
+<<<<<<< HEAD
 from app.services import llm, verticals, voice
 from app.models.schema import VideoParams
+=======
+from app.services import verticals, voice
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
 
 ROOT_DIR = Path(__file__).parent.parent.parent
 WEBUI_MAIN = ROOT_DIR / "webui" / "Main.py"
@@ -43,8 +47,11 @@ def _running_app(harness):
         config.app,
         video_source="firefly",
         firefly_webhook_url="http://nuc.test/webhook",
+<<<<<<< HEAD
         firefly_webhook_token="",
         firefly_concurrency=1,
+=======
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
         material_concurrency=1,
         video_clip_concurrency=1,
     )
@@ -130,6 +137,7 @@ def test_firefly_source_passes_generate_whitelist():
     whitelist_block = text.split("params.video_source not in [", 1)[1]
     whitelist = whitelist_block.split("]", 1)[0]
     assert '"firefly"' in whitelist
+<<<<<<< HEAD
 
 
 def test_firefly_webhook_token_setting_is_password_and_persists():
@@ -224,3 +232,5 @@ def test_type_beat_controls_and_restored_metadata():
         assert app.number_input(key="beat_bpm_input").value == 105.0
         assert app.text_input(key="beat_key_input").value == "D minor"
         assert app.text_input(key="beat_title_input").value == "Nightfall"
+=======
+>>>>>>> 8322c94 (feat: add Firefly image generation and content presets)
