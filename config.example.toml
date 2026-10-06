@@ -216,6 +216,9 @@ openai_image_prompt_template = ""
 # and rendered into short zoom-effect video clips. Firefly fair use is
 # currently unlimited (0 credits), but each image takes minutes to generate.
 firefly_webhook_url = ""
+# Optional bearer token for webhook authentication; empty sends no auth header.
+# Configure matching header authentication on your webhook when using a token.
+firefly_webhook_token = ""
 # Text-to-image model requested from the n8n chain. The chain maps these names
 # onto Adobe model IDs and returns the resolved model_key. Only the models
 # listed here have been verified under unlimited fair use (0 credits):
