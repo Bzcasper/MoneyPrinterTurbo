@@ -2616,5 +2616,72 @@ class TestTaskService(unittest.TestCase):
         print(result)
 
 
+    def test_firefly_vertical_generates_full_scenes_and_preserves_script_order(self):
+        for vertical in ("diy", "type_beat"):
+            with self.subTest(vertical=vertical):
+                params = VideoParams(video_subject="project", video_source="firefly", content_vertical=vertical)
+                scenes = ["Finished project, natural light", "Hands working, close view"]
+                with (
+                    patch.object(tm.llm, "generate_terms", return_value=scenes) as generate,
+                    patch.object(tm.twelvelabs, "rerank_terms_by_subject") as rerank,
+                ):
+                    result = tm.generate_terms("scenes-test", params, "One step. Then another.")
+                self.assertEqual(result, scenes)
+                self.assertTrue(params.firefly_scene_prompts)
+                self.assertEqual(generate.call_args.kwargs["terms_prompt"], tm.verticals.get_vertical(vertical)["terms_prompt"])
+                self.assertTrue(generate.call_args.kwargs["match_script_order"])
+                rerank.assert_not_called()
+
+    def test_stock_and_keyword_vertical_keep_default_terms_path(self):
+        for source, vertical in (("pexels", "diy"), ("firefly", "jewelry"), ("firefly", "none")):
+            with self.subTest(source=source, vertical=vertical):
+                params = VideoParams(video_subject="project", video_source=source, content_vertical=vertical)
+                with (
+                    patch.object(tm.llm, "generate_terms", return_value=["wood", "tools"]) as generate,
+                    patch.object(tm.twelvelabs, "rerank_terms_by_subject", return_value=["tools", "wood"]) as rerank,
+                ):
+                    result = tm.generate_terms("keywords-test", params, "A short script.")
+                self.assertEqual(result, ["tools", "wood"])
+                self.assertFalse(params.firefly_scene_prompts)
+                generate.assert_called_once_with(video_subject="project", video_script="A short script.", amount=5, match_script_order=False)
+                rerank.assert_called_once()
+
+    def test_manual_firefly_scene_prompts_keep_commas_and_accept_json_or_lines(self):
+        scenes = ["Hands cutting wood, sunlight, no text", "Finished shelf, books on top"]
+        for value in (scenes, '\n'.join(scenes), tm.json.dumps(scenes)):
+            with self.subTest(value_type=type(value).__name__):
+                params = VideoParams(video_subject="shelf", video_source="firefly", video_terms=value, firefly_scene_prompts=True)
+                with patch.object(tm.llm, "generate_terms") as generate, patch.object(tm.twelvelabs, "rerank_terms_by_subject") as rerank:
+                    result = tm.generate_terms("manual-scene", params, "script")
+                self.assertEqual(result, scenes)
+                generate.assert_not_called()
+                rerank.assert_not_called()
+        params = VideoParams(video_subject="shelf", video_source="firefly", video_terms="wood, tools")
+        with patch.object(tm.twelvelabs, "rerank_terms_by_subject", side_effect=lambda **kwargs: kwargs["search_terms"]):
+            self.assertEqual(tm.generate_terms("manual-keywords", params, "script"), ["wood", "tools"])
+
+    def test_manual_firefly_scene_prompts_reject_malformed_json(self):
+        params = VideoParams(video_subject="shelf", video_source="firefly", video_terms='["unfinished"', firefly_scene_prompts=True)
+        with self.assertRaisesRegex(ValueError, "JSON array or one per line"):
+            tm.generate_terms("invalid-scenes", params, "script")
+
+    def test_firefly_scenes_forward_bypass_and_sequential_combination(self):
+        params = VideoParams(video_subject="project", video_source="firefly", firefly_scene_prompts=True, bgm_type="")
+        with (
+            tempfile.TemporaryDirectory() as task_dir,
+            patch.object(tm.utils, "task_dir", return_value=task_dir),
+            patch.object(tm.material, "download_videos", return_value=["scene.mp4"]) as download,
+            patch.object(tm.video, "combine_videos") as combine,
+            patch.object(tm.video, "generate_video"),
+            patch.object(tm.sm.state, "update_task"),
+        ):
+            paths = tm.get_video_materials("scene-task", params, ["A scene, with commas"], 5)
+            tm.generate_final_videos("scene-task", params, paths, "audio.mp3", "", 5)
+        self.assertTrue(download.call_args.kwargs["firefly_scene_prompts"])
+        self.assertTrue(download.call_args.kwargs["match_script_order"])
+        self.assertEqual(download.call_args.kwargs["video_concat_mode"], tm.VideoConcatMode.sequential)
+        self.assertEqual(combine.call_args.kwargs["video_concat_mode"], tm.VideoConcatMode.sequential)
+
+
 if __name__ == "__main__":
     unittest.main()

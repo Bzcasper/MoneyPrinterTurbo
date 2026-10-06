@@ -300,6 +300,35 @@ class TestScriptPromptOptions(unittest.TestCase):
             )
 
 
+    def test_generate_terms_custom_scene_prompt_replaces_only_amount(self):
+        scenes = ["Hands sanding wood, soft window light", "Finished shelf in use, warm workshop"]
+        custom = 'Return {amount} complete scenes. Example: {"detail": "keep literal braces"}'
+        with patch.object(llm, "_generate_response", return_value=json.dumps(scenes)) as generate:
+            result = llm.generate_terms("shelf", "Sand the wood. Fit the shelf.", amount=2,
+                                        terms_prompt=custom, app_config={"llm_provider": "example"})
+        self.assertEqual(result, scenes)
+        prompt = generate.call_args.args[0]
+        self.assertIn('Return 2 complete scenes. Example: {"detail": "keep literal braces"}', prompt)
+        self.assertIn("Sand the wood. Fit the shelf.", prompt)
+        self.assertNotIn("1-3 words", prompt)
+        self.assertEqual(generate.call_args.kwargs["app_config"], {"llm_provider": "example"})
+
+    def test_generate_terms_custom_scenes_retry_incomplete_or_invalid_arrays(self):
+        for first in ('["one scene"]', '["one scene", 2]', '["one scene", " "]'):
+            with self.subTest(response=first), patch.object(
+                llm, "_generate_response", side_effect=[first, '[" scene one, with details ", "scene two"]']
+            ) as generate:
+                result = llm.generate_terms("test", "script", amount=2, terms_prompt="Return {amount} scenes")
+            self.assertEqual(result, ["scene one, with details", "scene two"])
+            self.assertEqual(generate.call_count, 2)
+
+    def test_generate_terms_custom_scenes_exhaust_retries_without_partial_terms(self):
+        with patch.object(llm, "_generate_response", return_value='["only one scene"]') as generate:
+            result = llm.generate_terms("test", "script", amount=2, terms_prompt="Return {amount} scenes")
+        self.assertEqual(result, [])
+        self.assertEqual(generate.call_count, llm._max_retries)
+
+
 class TestLLMConnection(unittest.TestCase):
     def test_connection_sends_one_minimal_request(self):
         """连接测试只发送一次固定最小请求，不触发脚本生成重试。"""

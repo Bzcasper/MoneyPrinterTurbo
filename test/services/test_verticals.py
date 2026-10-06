@@ -68,5 +68,28 @@ class TestContentVerticals(unittest.TestCase):
                 self.assertIn(aspect, valid, key)
 
 
+    def test_scene_prompts_have_required_style_and_visual_constraints(self):
+        for key, suffix in (
+            ("diy", "photorealistic, natural window light, clean wooden workbench, shallow depth of field, 4k"),
+            ("type_beat", "dark noir, cinematic, 35mm film grain, low-key lighting, deep shadows, teal and crimson neon accents"),
+        ):
+            prompt = verticals.get_vertical(key)["terms_prompt"]
+            self.assertIn("{amount}", prompt)
+            self.assertIn("twenty to thirty-five", prompt)
+            self.assertIn("readable text", prompt)
+            self.assertIn("faces", prompt)
+            self.assertTrue(prompt.endswith(suffix))
+        self.assertIn("first scene shows the finished project", verticals.DIY_TERMS_PROMPT)
+        self.assertIn("last shows the finished project in use", verticals.DIY_TERMS_PROMPT)
+        self.assertEqual(verticals.get_vertical("jewelry")["terms_prompt"], "")
+
+    def test_diy_script_prompt_is_tts_safe_and_type_beat_has_lease_line(self):
+        self.assertIn("numbers and units as words", verticals.DIY_SCRIPT_PROMPT)
+        self.assertIn("one simple step per paragraph", verticals.DIY_SCRIPT_PROMPT)
+        self.assertIn("sentence under twenty words", verticals.DIY_SCRIPT_PROMPT)
+        self.assertIn("lease the beat via the link in the description", verticals.TYPE_BEAT_SCRIPT_PROMPT)
+        self.assertIn("quoted lyrics", verticals.TYPE_BEAT_SCRIPT_PROMPT)
+
+
 if __name__ == "__main__":
     unittest.main()
