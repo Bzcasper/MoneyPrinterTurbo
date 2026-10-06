@@ -64,7 +64,7 @@ tls_verify = true
 
 # Available values: "pexels", "pixabay", "coverr", "wavespeed",
 # "volcengine_seedance", "ofox", "metaso_minimax", "muapi", "loomloom",
-# "openai_image", "local".
+# "openai_image", "firefly", "local".
 # "wavespeed" generates brand-new clips with WaveSpeed AI text-to-video models
 # instead of searching stock footage; generation is billed per request.
 # "loomloom" is a paid Shengsuan Cloud source and requires explicit
@@ -206,6 +206,27 @@ openai_image_size = ""
 # placeholder to inject the keyword; leave empty to send terms as-is.
 # Example: "cinematic photo of {term}, photorealistic, high detail"
 openai_image_prompt_template = ""
+
+# Adobe Firefly text-to-image material source ("firefly"). Images are
+# generated through a self-hosted n8n webhook ("Firefly Private Web
+# Generation API" workflow) which holds the Adobe user session, runs the
+# fair-use preflight, and polls the async job. Set the full webhook URL,
+# for example "http://10.0.0.242:5678/webhook/firefly-provider-generate".
+# Like openai_image, images are generated on demand (one per script keyword)
+# and rendered into short zoom-effect video clips. Firefly fair use is
+# currently unlimited (0 credits), but each image takes minutes to generate.
+firefly_webhook_url = ""
+# Text-to-image model requested from the n8n chain. The chain maps these names
+# onto Adobe model IDs and returns the resolved model_key. Only the models
+# listed here have been verified under unlimited fair use (0 credits):
+# firefly-image-5, gpt-image-1, gpt-image-1.5, nano-banana-pro, flux-2-pro,
+# ideogram-3. Any other value is passed through unchanged.
+firefly_image_model = "firefly-image-5"
+# Optional prompt template applied to every search term. Use the "{term}"
+# placeholder to inject the keyword; leave empty to use the same cinematic
+# default as openai_image.
+# Example: "cinematic photo of {term}, photorealistic, high detail"
+firefly_prompt_template = ""
 
 # Optional TwelveLabs integration for semantic material ranking and video QA.
 # Install the optional dependency with: uv sync --extra twelvelabs

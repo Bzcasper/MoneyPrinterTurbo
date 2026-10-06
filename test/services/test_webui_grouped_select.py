@@ -41,7 +41,14 @@ class _GroupedSelectHarness:
 @contextmanager
 def _running_app(harness, *, saved_video_source="pexels"):
     """在整个用例期间保持组件、配置和外部音色查询隔离。"""
-    test_app_config = dict(config.app, video_source=saved_video_source)
+    test_app_config = dict(
+        config.app,
+        video_source=saved_video_source,
+        # 本地 config.toml 可能带着用户在真实 UI 里改过的并发值（并持久化），
+        # 用例断言的是默认并发，这里显式固定，避免环境串味。
+        material_concurrency=1,
+        video_clip_concurrency=1,
+    )
     test_ui_config = dict(config.ui, language="en")
     with (
         patch(
@@ -125,6 +132,7 @@ def test_grouped_video_source_keeps_groups_and_accessible_label_binding():
             "wavespeed",
             "muapi",
             "openai_image",
+            "firefly",
             "local",
         ]
 
@@ -140,11 +148,13 @@ def test_stock_concurrency_only_appears_for_stock_sources():
     harness = _GroupedSelectHarness()
     with _running_app(harness) as app:
         stock = next(
-            item for item in app.selectbox
+            item
+            for item in app.selectbox
             if item.key.startswith("material_concurrency_select_")
         )
         clip = next(
-            item for item in app.selectbox
+            item
+            for item in app.selectbox
             if item.key.startswith("clip_rendering_concurrency_select_")
         )
         assert stock.value == 1
@@ -152,7 +162,8 @@ def test_stock_concurrency_only_appears_for_stock_sources():
 
         stock.set_value(4).run()
         clip = next(
-            item for item in app.selectbox
+            item
+            for item in app.selectbox
             if item.key.startswith("clip_rendering_concurrency_select_")
         )
         clip.set_value(2).run()
@@ -170,14 +181,19 @@ def test_stock_concurrency_only_appears_for_stock_sources():
             app.run()
             assert [str(item.value) for item in app.exception] == []
             stock_widgets = [
-                item for item in app.selectbox
+                item
+                for item in app.selectbox
                 if item.key.startswith("material_concurrency_select_")
             ]
             assert bool(stock_widgets) is show_stock
             if show_stock:
                 assert stock_widgets[0].value == 4
-            assert next(
-                item for item in app.selectbox
-                if item.key.startswith("clip_rendering_concurrency_select_")
-            ).value == 2
+            assert (
+                next(
+                    item
+                    for item in app.selectbox
+                    if item.key.startswith("clip_rendering_concurrency_select_")
+                ).value
+                == 2
+            )
             assert config.app["material_concurrency"] == 4
