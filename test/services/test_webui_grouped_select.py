@@ -148,13 +148,11 @@ def test_stock_concurrency_only_appears_for_stock_sources():
     harness = _GroupedSelectHarness()
     with _running_app(harness) as app:
         stock = next(
-            item
-            for item in app.selectbox
+            item for item in app.selectbox
             if item.key.startswith("material_concurrency_select_")
         )
         clip = next(
-            item
-            for item in app.selectbox
+            item for item in app.selectbox
             if item.key.startswith("clip_rendering_concurrency_select_")
         )
         assert stock.value == 1
@@ -162,8 +160,7 @@ def test_stock_concurrency_only_appears_for_stock_sources():
 
         stock.set_value(4).run()
         clip = next(
-            item
-            for item in app.selectbox
+            item for item in app.selectbox
             if item.key.startswith("clip_rendering_concurrency_select_")
         )
         clip.set_value(2).run()
@@ -181,19 +178,14 @@ def test_stock_concurrency_only_appears_for_stock_sources():
             app.run()
             assert [str(item.value) for item in app.exception] == []
             stock_widgets = [
-                item
-                for item in app.selectbox
+                item for item in app.selectbox
                 if item.key.startswith("material_concurrency_select_")
             ]
             assert bool(stock_widgets) is show_stock
             if show_stock:
                 assert stock_widgets[0].value == 4
-            assert (
-                next(
-                    item
-                    for item in app.selectbox
-                    if item.key.startswith("clip_rendering_concurrency_select_")
-                ).value
-                == 2
-            )
+            assert next(
+                item for item in app.selectbox
+                if item.key.startswith("clip_rendering_concurrency_select_")
+            ).value == 2
             assert config.app["material_concurrency"] == 4
