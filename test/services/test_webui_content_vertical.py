@@ -43,6 +43,7 @@ def _running_app(harness):
         video_source="firefly",
         firefly_webhook_url="http://nuc.test/webhook",
         firefly_webhook_token="",
+        firefly_concurrency=1,
         material_concurrency=1,
         video_clip_concurrency=1,
     )
@@ -140,4 +141,16 @@ def test_firefly_webhook_token_setting_is_password_and_persists():
         assert field.proto.type == field.proto.PASSWORD
         field.set_value("  example-webhook-token  ").run()
         assert config.app["firefly_webhook_token"] == "example-webhook-token"
+        assert [str(item.value) for item in app.exception] == []
+
+
+def test_firefly_concurrency_setting_persists():
+    with _running_app(_GroupedSelectHarness()) as app:
+        app.session_state["settings_dialog_open"] = True
+        app.session_state["settings_dialog_target_tab"] = "material"
+        app.run()
+        field = next(item for item in app.number_input if item.key == "firefly_concurrency_input")
+        assert field.value == 1
+        field.set_value(4).run()
+        assert config.app["firefly_concurrency"] == 4
         assert [str(item.value) for item in app.exception] == []
