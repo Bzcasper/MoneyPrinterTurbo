@@ -468,6 +468,16 @@
     "Publishing Title Template": "Titelvorlage",
     "Publishing Description Template": "Beschreibungsvorlage",
     "Inherit Global Privacy": "Globale Sichtbarkeit verwenden",
-    "Vertical Publishing Help": "Leere Felder verwenden das globale Profil und generierte Metadaten. Vorlagen: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Die Sichtbarkeit gilt für YouTube."
+    "Vertical Publishing Help": "Leere Felder verwenden das globale Profil und generierte Metadaten. Vorlagen: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Die Sichtbarkeit gilt für YouTube.",
+    "Firefly Test One Image": "Ein Firefly-Bild testen",
+    "Firefly Test Image Help": "Ein kostenpflichtiges Bild mit einem kurzen Beispieltext, dem gewählten Modell und Seitenverhältnis erzeugen.",
+    "Firefly Testing Image": "Testbild wird erzeugt...",
+    "Firefly Test Image": "Firefly-Testbild",
+    "Firefly Test Failed": "Der Bildtest ist fehlgeschlagen. Webhook-Einstellungen prüfen und erneut versuchen.",
+    "Firefly Test Needs Webhook": "Zum Bildtest die Firefly-Webhook-URL festlegen.",
+    "Firefly Generation Estimate": "Firefly-Schätzung: {images} Bilder, {minutes} Minuten für die Bilderzeugung, Parallelität {concurrency}.",
+    "Firefly Estimate Unavailable": "Die Schätzung benötigt gültige Szenenbeschreibungen und eine pro DIY-Absatz.",
+    "Firefly Estimate Assumed": "Bis zum ersten Test werden zwei bis fünf Minuten pro Bild angenommen. Skript, Audio, Rendering und Upload sind ausgeschlossen; Warteschlangen und Wiederholungen können länger dauern.",
+    "Firefly Estimate Measured": "Der Zeitbereich basiert auf dem letzten Bildtest mit diesem Webhook, Modell und Seitenverhältnis. Skript, Audio, Rendering und Upload sind ausgeschlossen; Warteschlangen und Wiederholungen können länger dauern."
   }
 }

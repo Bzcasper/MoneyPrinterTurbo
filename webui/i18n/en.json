@@ -627,6 +627,16 @@
     "Publishing Title Template": "Title Template",
     "Publishing Description Template": "Description Template",
     "Inherit Global Privacy": "Use Global Privacy",
-    "Vertical Publishing Help": "Blank fields use the global profile and generated metadata. Templates: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Privacy applies to YouTube."
+    "Vertical Publishing Help": "Blank fields use the global profile and generated metadata. Templates: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Privacy applies to YouTube.",
+    "Firefly Test One Image": "Test One Firefly Image",
+    "Firefly Test Image Help": "Generate one paid image with a short sample prompt using the selected model and aspect ratio.",
+    "Firefly Testing Image": "Generating test image...",
+    "Firefly Test Image": "Firefly Test Image",
+    "Firefly Test Failed": "Image test failed. Check the webhook configuration and try again.",
+    "Firefly Test Needs Webhook": "Set the Firefly webhook URL to test an image.",
+    "Firefly Generation Estimate": "Firefly estimate: {images} images, {minutes} minutes for image generation, concurrency {concurrency}.",
+    "Firefly Estimate Unavailable": "An estimate needs valid scene prompts and one prompt per DIY paragraph.",
+    "Firefly Estimate Assumed": "Planning estimate assumes two to five minutes per image until a test is available. Excludes script, audio, rendering and upload; queues and retries may add time.",
+    "Firefly Estimate Measured": "Time range uses your last image test with this webhook, model and aspect ratio. Excludes script, audio, rendering and upload; queues and retries may add time."
   }
 }

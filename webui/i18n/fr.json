@@ -468,6 +468,16 @@
     "Publishing Title Template": "Modèle de titre",
     "Publishing Description Template": "Modèle de description",
     "Inherit Global Privacy": "Utiliser la confidentialité globale",
-    "Vertical Publishing Help": "Les champs vides utilisent le profil global et les métadonnées générées. Modèles : {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. La confidentialité s’applique à YouTube."
+    "Vertical Publishing Help": "Les champs vides utilisent le profil global et les métadonnées générées. Modèles : {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. La confidentialité s’applique à YouTube.",
+    "Firefly Test One Image": "Tester une image Firefly",
+    "Firefly Test Image Help": "Génère une image payante avec une courte description de test, le modèle et le format sélectionnés.",
+    "Firefly Testing Image": "Génération de l’image de test...",
+    "Firefly Test Image": "Image de test Firefly",
+    "Firefly Test Failed": "Le test a échoué. Vérifiez la configuration du webhook et réessayez.",
+    "Firefly Test Needs Webhook": "Définissez l’URL du webhook Firefly pour tester une image.",
+    "Firefly Generation Estimate": "Estimation Firefly : {images} images, {minutes} minutes de génération, parallélisme {concurrency}.",
+    "Firefly Estimate Unavailable": "L’estimation nécessite des descriptions de scène valides et une par paragraphe de bricolage.",
+    "Firefly Estimate Assumed": "La prévision suppose deux à cinq minutes par image avant le premier test. Script, audio, rendu et envoi exclus ; les files d’attente et nouvelles tentatives peuvent prolonger la durée.",
+    "Firefly Estimate Measured": "La durée utilise votre dernier test avec ce webhook, modèle et format. Script, audio, rendu et envoi exclus ; les files d’attente et nouvelles tentatives peuvent prolonger la durée."
   }
 }

@@ -5690,7 +5690,169 @@ def _render_video_settings(panel, params):
                 _render_metaso_minimax_video_settings(params)
             if params.video_source == "muapi":
                 _render_muapi_video_settings(params)
+            if params.video_source == "firefly":
+                _render_firefly_test_image(params)
     return uploaded_files
+
+
+def _firefly_test_fingerprint(params):
+    values = [
+        str(config.app.get("firefly_webhook_url", "") or "").strip(),
+        str(config.app.get("firefly_webhook_token", "") or "").strip(),
+        material._firefly_image_model(),
+        VideoAspect(params.video_aspect).value,
+    ]
+    return hashlib.sha256(json.dumps(values).encode("utf-8")).hexdigest()
+
+
+def _render_firefly_test_image(params):
+    enabled = material.is_firefly_enabled()
+    clicked = st.button(
+        tr("Firefly Test One Image"), key="firefly_test_image_button",
+        help=tr("Firefly Test Image Help"), disabled=not enabled,
+    )
+    if not enabled:
+        st.caption(tr("Firefly Test Needs Webhook"))
+        return
+    fingerprint = _firefly_test_fingerprint(params)
+    if clicked:
+        try:
+            started = time.monotonic()
+            with st.spinner(tr("Firefly Testing Image")), tempfile.TemporaryDirectory() as directory:
+                items = material.generate_images_firefly(
+                    "A single wooden block on a plain workbench, soft daylight, no text or logos.",
+                    minimum_duration=1, video_aspect=params.video_aspect,
+                    save_dir=directory, scene_prompt=True,
+                )
+                if len(items) != 1:
+                    st.error(tr("Firefly Test Failed"))
+                    return
+                image_bytes = Path(items[0].url).read_bytes()
+            st.session_state["firefly_test_image"] = {
+                "fingerprint": fingerprint, "image": image_bytes,
+                "seconds": max(time.monotonic() - started, 0.1),
+            }
+        except Exception as exc:
+            logger.warning(f"Firefly image test failed: {type(exc).__name__}")
+            st.error(tr("Firefly Test Failed"))
+            return
+    preview = st.session_state.get("firefly_test_image", {})
+    if preview.get("fingerprint") == fingerprint:
+        st.image(preview["image"], caption=tr("Firefly Test Image"))
+
+
+def _firefly_uploaded_audio_duration(uploaded):
+    """Probe an upload locally once per content digest, without persisting it."""
+    if uploaded is None:
+        return None
+    suffix = Path(uploaded.name).suffix.lower()
+    buffer = uploaded.getbuffer()
+    if suffix not in CUSTOM_AUDIO_EXTENSIONS or len(buffer) > bgm_service.MAX_BGM_UPLOAD_BYTES:
+        return None
+    fingerprint = hashlib.sha256(buffer).hexdigest()
+    cached = st.session_state.get("firefly_upload_duration", {})
+    if cached.get("fingerprint") == (suffix, fingerprint):
+        return cached.get("duration")
+    duration = None
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            audio_path = Path(directory) / f"estimate{suffix}"
+            audio_path.write_bytes(buffer)
+            measured = voice.get_audio_duration(str(audio_path))
+        if math.isfinite(measured) and measured > 0:
+            duration = float(measured)
+    except (OSError, TypeError, ValueError):
+        pass
+    st.session_state["firefly_upload_duration"] = {
+        "fingerprint": (suffix, fingerprint), "duration": duration,
+    }
+    return duration
+
+
+def _firefly_generation_estimate(params, uploaded_audio_file=None, uploaded_bgm_file=None):
+    """Estimate successful image requests and generation waves; never call a provider."""
+    if params.video_source != "firefly":
+        return None
+    script = utils.remove_pause_tags(params.video_script or "")
+    paragraphs = len(voice.split_script_paragraphs(script)) or max(int(params.paragraph_number), 1)
+    diy = video.is_diy_step_mode(params)
+    terms = params.video_terms
+    if terms:
+        try:
+            if isinstance(terms, str):
+                if params.firefly_scene_prompts:
+                    terms = json.loads(terms) if terms.lstrip().startswith("[") else terms.splitlines()
+                else:
+                    terms = re.split(r"[,，]", terms)
+            if not isinstance(terms, list) or not all(isinstance(term, str) for term in terms):
+                return None
+            available = sum(bool(term.strip()) for term in terms)
+        except json.JSONDecodeError:
+            return None
+    else:
+        available = paragraphs if diy else 8 if params.match_materials_to_script else 5
+    if available == 0 or (diy and available != paragraphs):
+        return None
+    duration_range = None
+    if not diy:
+        if video.is_beat_length_mode(params):
+            duration = _firefly_uploaded_audio_duration(uploaded_bgm_file)
+            if duration is None and params.bgm_type == "custom" and params.bgm_file:
+                try:
+                    duration = voice.get_audio_duration(bgm_service.resolve_bgm_file(params.bgm_file))
+                except (OSError, ValueError):
+                    duration = None
+        else:
+            duration = _firefly_uploaded_audio_duration(uploaded_audio_file)
+            if duration is None and script:
+                if voice.is_no_voice(params.voice_name):
+                    duration = math.ceil(voice.estimate_no_voice_duration(script))
+                else:
+                    duration = _matching_full_voice_preview_duration(script, params.voice_rate)
+                    if duration is not None:
+                        duration = math.ceil(duration)
+            if duration is None and script:
+                duration_range = _estimate_voiceover_duration_range(script, params.voice_rate)
+                if duration_range is not None:
+                    duration_range = tuple(math.ceil(value) for value in duration_range)
+        if isinstance(duration, (int, float)) and math.isfinite(duration) and duration > 0:
+            duration_range = (duration, duration)
+    image_min = image_max = available
+    if duration_range is not None:
+        image_min, image_max = (
+            min(available, max(1, math.ceil(duration * params.video_count / params.video_clip_duration)))
+            for duration in duration_range
+        )
+    concurrency = material._get_firefly_concurrency()
+    sample = st.session_state.get("firefly_test_image", {})
+    seconds = sample.get("seconds") if sample.get("fingerprint") == _firefly_test_fingerprint(params) else None
+    if isinstance(seconds, (int, float)) and math.isfinite(seconds) and seconds > 0:
+        seconds_min, seconds_max = seconds * 0.75, seconds * 1.5
+        basis_key = "Firefly Estimate Measured"
+    else:
+        seconds_min, seconds_max = 120, 300
+        basis_key = "Firefly Estimate Assumed"
+    return {
+        "image_min": image_min, "image_max": image_max, "concurrency": concurrency,
+        "minutes_min": math.ceil(image_min / concurrency) * seconds_min / 60,
+        "minutes_max": math.ceil(image_max / concurrency) * seconds_max / 60,
+        "basis_key": basis_key,
+    }
+
+
+def _render_firefly_generation_estimate(params, uploaded_audio_file, uploaded_bgm_file):
+    if params.video_source != "firefly":
+        return
+    estimate = _firefly_generation_estimate(params, uploaded_audio_file, uploaded_bgm_file)
+    if estimate is None:
+        st.caption(tr("Firefly Estimate Unavailable"))
+        return
+    st.info(tr("Firefly Generation Estimate").format(
+        images=_format_numeric_range(estimate["image_min"], estimate["image_max"], digits=0),
+        minutes=_format_numeric_range(estimate["minutes_min"], estimate["minutes_max"]),
+        concurrency=estimate["concurrency"],
+    ))
+    st.caption(tr(estimate["basis_key"]))
 
 
 def _render_wavespeed_video_settings(params):
@@ -8175,6 +8337,8 @@ def _render_generation_controls(
         st.session_state.pop("task_restore_upload_requirements", None)
 
     _render_settings_transfer(params)
+
+    _render_firefly_generation_estimate(params, uploaded_audio_file, uploaded_bgm_file)
 
     start_button = st.button(
         tr("Generate Video"),

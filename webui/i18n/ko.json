@@ -468,6 +468,16 @@
     "Publishing Title Template": "제목 템플릿",
     "Publishing Description Template": "설명 템플릿",
     "Inherit Global Privacy": "전역 공개 설정 사용",
-    "Vertical Publishing Help": "빈 필드는 전역 프로필과 생성된 메타데이터를 사용합니다. 템플릿: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. 공개 설정은 YouTube에 적용됩니다."
+    "Vertical Publishing Help": "빈 필드는 전역 프로필과 생성된 메타데이터를 사용합니다. 템플릿: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. 공개 설정은 YouTube에 적용됩니다.",
+    "Firefly Test One Image": "Firefly 이미지 한 장 테스트",
+    "Firefly Test Image Help": "선택한 모델과 화면 비율로 짧은 예제 프롬프트를 사용해 유료 이미지 한 장을 생성합니다.",
+    "Firefly Testing Image": "테스트 이미지 생성 중...",
+    "Firefly Test Image": "Firefly 테스트 이미지",
+    "Firefly Test Failed": "이미지 테스트에 실패했습니다. 웹훅 설정을 확인하고 다시 시도하세요.",
+    "Firefly Test Needs Webhook": "이미지를 테스트하려면 Firefly 웹훅 URL을 설정하세요.",
+    "Firefly Generation Estimate": "Firefly 예상: 이미지 {images}장, 이미지 생성 {minutes}분, 동시 작업 {concurrency}개.",
+    "Firefly Estimate Unavailable": "예상에는 유효한 장면 프롬프트와 DIY 문단별 프롬프트 한 개가 필요합니다.",
+    "Firefly Estimate Assumed": "테스트 전에는 이미지당 이~오 분을 가정합니다. 대본, 오디오, 렌더링 및 업로드는 제외하며 대기열과 재시도로 시간이 늘어날 수 있습니다.",
+    "Firefly Estimate Measured": "시간 범위는 이 웹훅, 모델, 화면 비율로 수행한 마지막 이미지 테스트를 기준으로 합니다. 대본, 오디오, 렌더링 및 업로드는 제외하며 대기열과 재시도로 시간이 늘어날 수 있습니다."
   }
 }

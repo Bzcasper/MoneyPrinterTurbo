@@ -468,6 +468,16 @@
     "Publishing Title Template": "Шаблон заголовка",
     "Publishing Description Template": "Шаблон описания",
     "Inherit Global Privacy": "Использовать общую видимость",
-    "Vertical Publishing Help": "Пустые поля используют общий профиль и созданные метаданные. Шаблоны: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Видимость применяется к YouTube."
+    "Vertical Publishing Help": "Пустые поля используют общий профиль и созданные метаданные. Шаблоны: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Видимость применяется к YouTube.",
+    "Firefly Test One Image": "Проверить одно изображение Firefly",
+    "Firefly Test Image Help": "Создать одно платное изображение с коротким примером запроса, выбранной моделью и соотношением сторон.",
+    "Firefly Testing Image": "Создаётся тестовое изображение...",
+    "Firefly Test Image": "Тестовое изображение Firefly",
+    "Firefly Test Failed": "Проверка не удалась. Проверьте настройки webhook и повторите попытку.",
+    "Firefly Test Needs Webhook": "Для проверки укажите URL webhook Firefly.",
+    "Firefly Generation Estimate": "Оценка Firefly: {images} изображений, {minutes} минут на генерацию, параллельность {concurrency}.",
+    "Firefly Estimate Unavailable": "Для оценки нужны корректные описания сцен и одно описание на абзац DIY.",
+    "Firefly Estimate Assumed": "До первой проверки предполагается от двух до пяти минут на изображение. Сценарий, аудио, рендеринг и загрузка не включены; очереди и повторы могут увеличить время.",
+    "Firefly Estimate Measured": "Диапазон рассчитан по последней проверке с этим webhook, моделью и соотношением сторон. Сценарий, аудио, рендеринг и загрузка не включены; очереди и повторы могут увеличить время."
   }
 }
