@@ -468,6 +468,16 @@
     "Publishing Title Template": "Mẫu tiêu đề",
     "Publishing Description Template": "Mẫu mô tả",
     "Inherit Global Privacy": "Dùng quyền riêng tư chung",
-    "Vertical Publishing Help": "Trường để trống dùng hồ sơ chung và siêu dữ liệu đã tạo. Mẫu: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Quyền riêng tư áp dụng cho YouTube."
+    "Vertical Publishing Help": "Trường để trống dùng hồ sơ chung và siêu dữ liệu đã tạo. Mẫu: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Quyền riêng tư áp dụng cho YouTube.",
+    "Firefly Test One Image": "Thử một ảnh Firefly",
+    "Firefly Test Image Help": "Tạo một ảnh trả phí bằng câu mô tả mẫu ngắn, mô hình và tỷ lệ khung hình đã chọn.",
+    "Firefly Testing Image": "Đang tạo ảnh thử...",
+    "Firefly Test Image": "Ảnh thử Firefly",
+    "Firefly Test Failed": "Thử ảnh thất bại. Kiểm tra cấu hình webhook rồi thử lại.",
+    "Firefly Test Needs Webhook": "Đặt URL webhook Firefly để thử một ảnh.",
+    "Firefly Generation Estimate": "Ước tính Firefly: {images} ảnh, {minutes} phút tạo ảnh, đồng thời {concurrency}.",
+    "Firefly Estimate Unavailable": "Cần mô tả cảnh hợp lệ và một mô tả cho mỗi đoạn DIY để ước tính.",
+    "Firefly Estimate Assumed": "Tạm tính hai đến năm phút mỗi ảnh trước khi có kết quả thử. Không gồm kịch bản, âm thanh, kết xuất và tải lên; hàng đợi và lần thử lại có thể tăng thời gian.",
+    "Firefly Estimate Measured": "Khoảng thời gian dùng lần thử ảnh gần nhất với webhook, mô hình và tỷ lệ này. Không gồm kịch bản, âm thanh, kết xuất và tải lên; hàng đợi và lần thử lại có thể tăng thời gian."
   }
 }

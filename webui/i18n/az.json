@@ -468,6 +468,16 @@
     "Publishing Title Template": "Başlıq şablonu",
     "Publishing Description Template": "Təsvir şablonu",
     "Inherit Global Privacy": "Ümumi məxfilikdən istifadə et",
-    "Vertical Publishing Help": "Boş sahələr ümumi profildən və yaradılmış metadatadan istifadə edir. Şablonlar: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Məxfilik YouTube üçün tətbiq olunur."
+    "Vertical Publishing Help": "Boş sahələr ümumi profildən və yaradılmış metadatadan istifadə edir. Şablonlar: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Məxfilik YouTube üçün tətbiq olunur.",
+    "Firefly Test One Image": "Bir Firefly şəklini sına",
+    "Firefly Test Image Help": "Seçilmiş model və tərəf nisbəti ilə qısa nümunə təsvirindən bir ödənişli şəkil yaradın.",
+    "Firefly Testing Image": "Sınaq şəkli yaradılır...",
+    "Firefly Test Image": "Firefly sınaq şəkli",
+    "Firefly Test Failed": "Şəkil sınağı uğursuz oldu. Webhook parametrlərini yoxlayıb yenidən sınayın.",
+    "Firefly Test Needs Webhook": "Şəkli sınamaq üçün Firefly webhook URL-ni təyin edin.",
+    "Firefly Generation Estimate": "Firefly təxmini: {images} şəkil, şəkil yaratmaq üçün {minutes} dəqiqə, paralellik {concurrency}.",
+    "Firefly Estimate Unavailable": "Təxmin üçün düzgün səhnə təsvirləri və hər DIY abzasına bir təsvir lazımdır.",
+    "Firefly Estimate Assumed": "Sınaq edilənədək hər şəkil üçün iki–beş dəqiqə nəzərdə tutulur. Mətn, səs, render və yükləmə daxil deyil; növbə və təkrar cəhdlər vaxtı artıra bilər.",
+    "Firefly Estimate Measured": "Vaxt aralığı bu webhook, model və tərəf nisbəti ilə son şəkil sınağınıza əsaslanır. Mətn, səs, render və yükləmə daxil deyil; növbə və təkrar cəhdlər vaxtı artıra bilər."
   }
 }

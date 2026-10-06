@@ -468,6 +468,16 @@
     "Publishing Title Template": "Plantilla del títol",
     "Publishing Description Template": "Plantilla de la descripció",
     "Inherit Global Privacy": "Utilitza la privadesa global",
-    "Vertical Publishing Help": "Els camps buits utilitzen el perfil global i les metadades generades. Plantilles: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. La privadesa s’aplica a YouTube."
+    "Vertical Publishing Help": "Els camps buits utilitzen el perfil global i les metadades generades. Plantilles: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. La privadesa s’aplica a YouTube.",
+    "Firefly Test One Image": "Prova una imatge Firefly",
+    "Firefly Test Image Help": "Genera una imatge de pagament amb un text breu de mostra, el model i la relació d’aspecte seleccionats.",
+    "Firefly Testing Image": "S’està generant la imatge de prova...",
+    "Firefly Test Image": "Imatge de prova Firefly",
+    "Firefly Test Failed": "La prova ha fallat. Revisa la configuració del webhook i torna-ho a provar.",
+    "Firefly Test Needs Webhook": "Configura l’URL del webhook de Firefly per provar una imatge.",
+    "Firefly Generation Estimate": "Estimació Firefly: {images} imatges, {minutes} minuts per generar-les, concurrència {concurrency}.",
+    "Firefly Estimate Unavailable": "L’estimació necessita descripcions d’escena vàlides i una per paràgraf de bricolatge.",
+    "Firefly Estimate Assumed": "Es preveuen de dos a cinc minuts per imatge fins que hi hagi una prova. No inclou text, àudio, renderització ni càrrega; les cues i els reintents poden allargar el temps.",
+    "Firefly Estimate Measured": "L’interval es basa en l’última prova amb aquest webhook, model i relació d’aspecte. No inclou text, àudio, renderització ni càrrega; les cues i els reintents poden allargar el temps."
   }
 }
