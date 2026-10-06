@@ -478,6 +478,9 @@
     "Firefly Generation Estimate": "Stima Firefly: {images} immagini, {minutes} minuti di generazione, concorrenza {concurrency}.",
     "Firefly Estimate Unavailable": "La stima richiede prompt di scena validi e uno per paragrafo fai da te.",
     "Firefly Estimate Assumed": "La stima presume da due a cinque minuti per immagine prima di una prova. Esclude testo, audio, rendering e caricamento; code e tentativi possono richiedere più tempo.",
-    "Firefly Estimate Measured": "L’intervallo usa l’ultima prova con questo webhook, modello e formato. Esclude testo, audio, rendering e caricamento; code e tentativi possono richiedere più tempo."
+    "Firefly Estimate Measured": "L’intervallo usa l’ultima prova con questo webhook, modello e formato. Esclude testo, audio, rendering e caricamento; code e tentativi possono richiedere più tempo.",
+    "Firefly Hero Shot": "Scena principale video Firefly",
+    "Firefly Hero Shot Help": "Genera un video di cinque secondi per la prima scena. Le immagini con zoom completano le scene più lunghe e le successive. Aggiunge una richiesta di generazione video.",
+    "Firefly Hero Estimate": "Aggiunge una richiesta video. La stima comprende solo le immagini; il tempo di generazione del video è aggiuntivo."
   }
 }

@@ -478,6 +478,9 @@
     "Firefly Generation Estimate": "Estimación Firefly: {images} imágenes, {minutes} minutos de generación, concurrencia {concurrency}.",
     "Firefly Estimate Unavailable": "La estimación necesita indicaciones de escena válidas y una por párrafo de bricolaje.",
     "Firefly Estimate Assumed": "Se suponen de dos a cinco minutos por imagen hasta realizar una prueba. No incluye guion, audio, renderizado ni subida; las colas y los reintentos pueden añadir tiempo.",
-    "Firefly Estimate Measured": "El intervalo usa tu última prueba con este webhook, modelo y relación de aspecto. No incluye guion, audio, renderizado ni subida; las colas y los reintentos pueden añadir tiempo."
+    "Firefly Estimate Measured": "El intervalo usa tu última prueba con este webhook, modelo y relación de aspecto. No incluye guion, audio, renderizado ni subida; las colas y los reintentos pueden añadir tiempo.",
+    "Firefly Hero Shot": "Plano principal de vídeo Firefly",
+    "Firefly Hero Shot Help": "Genera un vídeo de cinco segundos para la primera escena. Las imágenes con zoom completan las escenas más largas y las restantes. Añade una solicitud de generación de vídeo.",
+    "Firefly Hero Estimate": "Añade una solicitud de vídeo. La estimación solo incluye imágenes; el tiempo de generación del vídeo es adicional."
   }
 }

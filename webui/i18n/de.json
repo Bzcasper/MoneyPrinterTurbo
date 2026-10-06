@@ -478,6 +478,9 @@
     "Firefly Generation Estimate": "Firefly-Schätzung: {images} Bilder, {minutes} Minuten für die Bilderzeugung, Parallelität {concurrency}.",
     "Firefly Estimate Unavailable": "Die Schätzung benötigt gültige Szenenbeschreibungen und eine pro DIY-Absatz.",
     "Firefly Estimate Assumed": "Bis zum ersten Test werden zwei bis fünf Minuten pro Bild angenommen. Skript, Audio, Rendering und Upload sind ausgeschlossen; Warteschlangen und Wiederholungen können länger dauern.",
-    "Firefly Estimate Measured": "Der Zeitbereich basiert auf dem letzten Bildtest mit diesem Webhook, Modell und Seitenverhältnis. Skript, Audio, Rendering und Upload sind ausgeschlossen; Warteschlangen und Wiederholungen können länger dauern."
+    "Firefly Estimate Measured": "Der Zeitbereich basiert auf dem letzten Bildtest mit diesem Webhook, Modell und Seitenverhältnis. Skript, Audio, Rendering und Upload sind ausgeschlossen; Warteschlangen und Wiederholungen können länger dauern.",
+    "Firefly Hero Shot": "Firefly-Video für die erste Szene",
+    "Firefly Hero Shot Help": "Erzeugt ein fünfsekündiges Video für die erste Szene. Zoom-Bilder füllen längere Szenen und die übrigen Szenen. Fügt eine Videoanfrage hinzu.",
+    "Firefly Hero Estimate": "Fügt eine Videoanfrage hinzu. Die Schätzung umfasst nur Bilder; die Erzeugung des Videos benötigt zusätzliche Zeit."
   }
 }

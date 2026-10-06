@@ -118,6 +118,7 @@ class VideoParams(BaseModel):
     video_source: Optional[str] = "pexels"
     content_vertical: Literal["none", "diy", "type_beat", "jewelry"] = "none"
     firefly_scene_prompts: bool = False
+    firefly_hero_shot: bool = False
     video_materials: Optional[List[MaterialInfo]] = (
         None  # Materials used to generate the video
     )

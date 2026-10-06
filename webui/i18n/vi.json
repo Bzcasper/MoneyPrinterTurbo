@@ -478,6 +478,9 @@
     "Firefly Generation Estimate": "Ước tính Firefly: {images} ảnh, {minutes} phút tạo ảnh, đồng thời {concurrency}.",
     "Firefly Estimate Unavailable": "Cần mô tả cảnh hợp lệ và một mô tả cho mỗi đoạn DIY để ước tính.",
     "Firefly Estimate Assumed": "Tạm tính hai đến năm phút mỗi ảnh trước khi có kết quả thử. Không gồm kịch bản, âm thanh, kết xuất và tải lên; hàng đợi và lần thử lại có thể tăng thời gian.",
-    "Firefly Estimate Measured": "Khoảng thời gian dùng lần thử ảnh gần nhất với webhook, mô hình và tỷ lệ này. Không gồm kịch bản, âm thanh, kết xuất và tải lên; hàng đợi và lần thử lại có thể tăng thời gian."
+    "Firefly Estimate Measured": "Khoảng thời gian dùng lần thử ảnh gần nhất với webhook, mô hình và tỷ lệ này. Không gồm kịch bản, âm thanh, kết xuất và tải lên; hàng đợi và lần thử lại có thể tăng thời gian.",
+    "Firefly Hero Shot": "Cảnh đầu bằng video Firefly",
+    "Firefly Hero Shot Help": "Tạo một video năm giây cho cảnh đầu. Hình ảnh thu phóng bổ sung phần còn lại của cảnh dài và các cảnh tiếp theo. Thêm một yêu cầu tạo video.",
+    "Firefly Hero Estimate": "Thêm một yêu cầu tạo video. Ước tính chỉ bao gồm hình ảnh; thời gian tạo video được tính thêm."
   }
 }

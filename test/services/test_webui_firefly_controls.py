@@ -212,6 +212,41 @@ def test_other_material_sources_have_no_firefly_estimate(controls):
     post.assert_not_called()
 
 
+@pytest.mark.parametrize("changes,expected", [
+    ({"video_terms": ["a", "b", "c"], "video_clip_duration": 3}, (2, 3)),
+    ({"video_terms": ["a", "b", "c"], "video_clip_duration": 10}, (3, 3)),
+    ({"content_vertical": "diy", "video_script": "Result.\n\nBuild.\n\nUse.", "video_clip_duration": 10}, (2, 3)),
+    ({"content_vertical": "diy", "video_script": "Build."}, (0, 1)),
+])
+def test_hero_estimate_includes_possible_filler_without_requesting_a_video(controls, changes, expected):
+    with patch.object(material.requests, "post") as post, patch.object(material.requests, "get") as get:
+        estimate = controls["_firefly_generation_estimate"](params(firefly_hero_shot=True, **changes))
+    assert (estimate["image_min"], estimate["image_max"]) == expected
+    post.assert_not_called()
+    get.assert_not_called()
+
+
+def test_hero_setting_is_optional_persists_and_does_not_generate_on_rerun():
+    response = _webhook_response({"success": True, "image_url": "https://cdn.example/test.png"})
+    with patch.object(material.requests, "post", return_value=response) as post, patch.object(material.requests, "get", return_value=_download_response(_png_bytes())) as get:
+        with _running_app(_GroupedSelectHarness()) as app:
+            _select_vertical(app, "diy")
+            checkbox = app.checkbox(key="firefly_hero_shot_input")
+            assert checkbox.value is False
+            checkbox.check().run()
+            assert not list(app.exception)
+            assert config.ui["firefly_hero_shot"] is True
+            assert any("one native video request" in item.value for item in app.caption)
+            app.run()
+            assert app.checkbox(key="firefly_hero_shot_input").value is True
+            post.assert_not_called()
+            assert not any("cdn.example" in call.args[0] for call in get.call_args_list)
+            app.button(key="firefly_test_image_button").click().run()
+            assert post.call_args.kwargs["json"]["media_type"] == "image"
+            assert post.call_count == 1
+    assert all(call.kwargs["json"]["media_type"] != "video" for call in post.call_args_list)
+
+
 def test_webui_test_button_sends_one_tiny_scene_request_and_reruns_without_requests():
     response = _webhook_response({"success": True, "image_url": "https://cdn.example/test.png"})
     with patch.object(material.requests, "post", return_value=response) as post, patch.object(material.requests, "get", return_value=_download_response(_png_bytes())):

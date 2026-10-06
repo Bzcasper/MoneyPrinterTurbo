@@ -637,6 +637,9 @@
     "Firefly Generation Estimate": "Firefly estimate: {images} images, {minutes} minutes for image generation, concurrency {concurrency}.",
     "Firefly Estimate Unavailable": "An estimate needs valid scene prompts and one prompt per DIY paragraph.",
     "Firefly Estimate Assumed": "Planning estimate assumes two to five minutes per image until a test is available. Excludes script, audio, rendering and upload; queues and retries may add time.",
-    "Firefly Estimate Measured": "Time range uses your last image test with this webhook, model and aspect ratio. Excludes script, audio, rendering and upload; queues and retries may add time."
+    "Firefly Estimate Measured": "Time range uses your last image test with this webhook, model and aspect ratio. Excludes script, audio, rendering and upload; queues and retries may add time.",
+    "Firefly Hero Shot": "Native Firefly Hero Shot",
+    "Firefly Hero Shot Help": "Generate one five-second video for the first scene. Zoom images fill longer holds and the remaining scenes. Adds one video generation request.",
+    "Firefly Hero Estimate": "Adds one native video request. The estimate covers images only; native video generation time is additional."
   }
 }

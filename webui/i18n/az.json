@@ -478,6 +478,9 @@
     "Firefly Generation Estimate": "Firefly təxmini: {images} şəkil, şəkil yaratmaq üçün {minutes} dəqiqə, paralellik {concurrency}.",
     "Firefly Estimate Unavailable": "Təxmin üçün düzgün səhnə təsvirləri və hər DIY abzasına bir təsvir lazımdır.",
     "Firefly Estimate Assumed": "Sınaq edilənədək hər şəkil üçün iki–beş dəqiqə nəzərdə tutulur. Mətn, səs, render və yükləmə daxil deyil; növbə və təkrar cəhdlər vaxtı artıra bilər.",
-    "Firefly Estimate Measured": "Vaxt aralığı bu webhook, model və tərəf nisbəti ilə son şəkil sınağınıza əsaslanır. Mətn, səs, render və yükləmə daxil deyil; növbə və təkrar cəhdlər vaxtı artıra bilər."
+    "Firefly Estimate Measured": "Vaxt aralığı bu webhook, model və tərəf nisbəti ilə son şəkil sınağınıza əsaslanır. Mətn, səs, render və yükləmə daxil deyil; növbə və təkrar cəhdlər vaxtı artıra bilər.",
+    "Firefly Hero Shot": "Firefly ilə əsas video kadrı",
+    "Firefly Hero Shot Help": "İlk səhnə üçün beş saniyəlik bir video yaradın. Daha uzun səhnələr və qalan səhnələr yaxınlaşdırılan şəkillərlə tamamlanır. Bir video yaratma sorğusu əlavə edir.",
+    "Firefly Hero Estimate": "Bir video yaratma sorğusu əlavə olunur. Təxmin yalnız şəkilləri əhatə edir; video yaratma vaxtı əlavədir."
   }
 }

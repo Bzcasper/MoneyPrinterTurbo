@@ -1526,6 +1526,7 @@ def _apply_restored_params(params):
     st.session_state["video_script"] = params.get("video_script") or ""
     st.session_state["video_terms"] = str(video_terms)
     st.session_state["firefly_scene_prompts_input"] = bool(params.get("firefly_scene_prompts", False))
+    st.session_state["firefly_hero_shot_input"] = bool(params.get("firefly_hero_shot", False))
     _set_stable_widget_value("content_vertical_select", params.get("content_vertical") or "none")
     for name, default in {
         "beat_length_mode": False, "beat_sync_cuts": True,
@@ -5691,6 +5692,13 @@ def _render_video_settings(panel, params):
             if params.video_source == "muapi":
                 _render_muapi_video_settings(params)
             if params.video_source == "firefly":
+                params.firefly_hero_shot = st.checkbox(
+                    tr("Firefly Hero Shot"),
+                    value=bool(config.ui.get("firefly_hero_shot", False)),
+                    help=tr("Firefly Hero Shot Help"),
+                    key="firefly_hero_shot_input",
+                )
+                _set_runtime_config("ui", "firefly_hero_shot", params.firefly_hero_shot)
                 _render_firefly_test_image(params)
     return uploaded_files
 
@@ -5823,6 +5831,15 @@ def _firefly_generation_estimate(params, uploaded_audio_file=None, uploaded_bgm_
             min(available, max(1, math.ceil(duration * params.video_count / params.video_clip_duration)))
             for duration in duration_range
         )
+    if params.firefly_hero_shot and (
+        diy or min(
+            params.video_clip_duration,
+            duration_range[0] * params.video_count if duration_range is not None else params.video_clip_duration,
+        ) <= material.FIREFLY_VIDEO_DURATION
+    ):
+        # The native clip can replace the first image, but its actual duration
+        # is known only after download. Include the possible filler in the range.
+        image_min = max(0, image_min - 1)
     concurrency = material._get_firefly_concurrency()
     sample = st.session_state.get("firefly_test_image", {})
     seconds = sample.get("seconds") if sample.get("fingerprint") == _firefly_test_fingerprint(params) else None
@@ -5853,6 +5870,8 @@ def _render_firefly_generation_estimate(params, uploaded_audio_file, uploaded_bg
         concurrency=estimate["concurrency"],
     ))
     st.caption(tr(estimate["basis_key"]))
+    if params.firefly_hero_shot:
+        st.caption(tr("Firefly Hero Estimate"))
 
 
 def _render_wavespeed_video_settings(params):

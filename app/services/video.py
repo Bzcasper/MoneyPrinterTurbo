@@ -1042,6 +1042,13 @@ def _plan_timed_clips(
         duration = end - start
         if not math.isfinite(duration) or duration <= 0:
             raise ValueError("cut times must increase and be finite")
+        # Quantize global boundaries, so fractional holds cannot lose one
+        # frame per scene or accumulate timing drift across the narration.
+        end_frame = (
+            math.ceil(round(end * fps, 9)) if index == len(cut_times) - 2
+            else round(end * fps)
+        )
+        duration = max(1, end_frame - round(start * fps)) / fps
         source = items[index % len(items)]
         planned.append(SubClippedVideoClip(
             file_path=source.file_path,
@@ -1161,13 +1168,15 @@ def combine_videos(
         or video_concat_mode != VideoConcatMode.sequential
     ):
         raise ValueError("DIY requires one ordered video per paragraph")
-    audio_clip = AudioFileClip(audio_file)
-    try:
-        # 这里只需要读取旁白音频时长来决定素材视频拼接长度；后续不会再使用
-        # audio_clip。读取完成后立即关闭，避免早退或异常路径泄漏文件句柄。
-        audio_duration = audio_clip.duration
-    finally:
-        close_clip(audio_clip)
+    audio_duration = target_duration
+    if audio_file or target_duration is None:
+        audio_clip = AudioFileClip(audio_file)
+        try:
+            # 这里只需要读取旁白音频时长来决定素材视频拼接长度；后续不会再使用
+            # audio_clip。读取完成后立即关闭，避免早退或异常路径泄漏文件句柄。
+            audio_duration = audio_clip.duration
+        finally:
+            close_clip(audio_clip)
     logger.info(f"audio duration: {audio_duration} seconds")
     logger.info(f"maximum clip duration: {max_clip_duration} seconds")
     required_video_duration = (
@@ -1338,7 +1347,9 @@ def combine_videos(
                 clip = shuffle_transition(clip)
 
             if cut_times is not None:
-                target_hold = subclipped_item.duration
+                # MoviePy floors duration * fps. A tiny frame fraction prevents
+                # floating point roundoff from dropping an intended final frame.
+                target_hold = (round(subclipped_item.duration * fps) + 1e-7) / fps
                 if clip.duration < target_hold:
                     clip = clip.with_effects([vfx.Loop(duration=target_hold)])
                 else:

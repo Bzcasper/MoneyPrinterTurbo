@@ -637,6 +637,9 @@
     "Firefly Generation Estimate": "Firefly 预估：{images} 张图片，图片生成约需 {minutes} 分钟，并发数 {concurrency}。",
     "Firefly Estimate Unavailable": "预估需要有效的场景提示词，DIY 每个段落对应一条提示词。",
     "Firefly Estimate Assumed": "首次测试前按每张图片两到五分钟估算。不含文案、音频、渲染和上传；排队与重试可能增加时间。",
-    "Firefly Estimate Measured": "时间范围参考当前 Webhook、模型和画面比例下最近一次图片测试。不含文案、音频、渲染和上传；排队与重试可能增加时间。"
+    "Firefly Estimate Measured": "时间范围参考当前 Webhook、模型和画面比例下最近一次图片测试。不含文案、音频、渲染和上传；排队与重试可能增加时间。",
+    "Firefly Hero Shot": "Firefly 原生视频主镜头",
+    "Firefly Hero Shot Help": "为第一个场景生成一段五秒视频。较长场景的剩余时间和其他场景使用缩放图片补充。会增加一次视频生成请求。",
+    "Firefly Hero Estimate": "会增加一次原生视频请求。估算仅包含图片，视频生成所需时间另计。"
   }
 }

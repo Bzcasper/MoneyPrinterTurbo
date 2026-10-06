@@ -23,6 +23,7 @@ from app.config import config
 from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode
 from app.services import (
     material_cache,
+    material_upload,
     metaso_minimax,
     muapi,
     ofox,
@@ -57,11 +58,11 @@ class _OpenAIImageDecodeError(ValueError):
 
 
 class OpenAIImagePaidResultError(RuntimeError):
-    """A paid image request cannot provide a usable local video material."""
+    """A paid generation cannot provide a usable local video material."""
 
 
 class OpenAIImageUnconfirmedError(OpenAIImagePaidResultError):
-    """A paid image request may have succeeded without returning a response."""
+    """A paid generation may have succeeded without returning a response."""
 
 
 def _safe_public_url(value: Any) -> str | None:
@@ -1830,6 +1831,9 @@ def _download_videos_openai_image_on_demand(
 # "缓慢放大"mp4 片段，对下游完全透明。Firefly 侧为 unlimited fair use
 # （0 积分），但单张生成耗时数分钟，仍按需逐段生成、凑够即停。
 FIREFLY_REQUEST_TIMEOUT = (30, 600)
+FIREFLY_VIDEO_MODEL = "firefly-video"
+FIREFLY_VIDEO_DURATION = 5
+FIREFLY_VIDEO_MAX_BYTES = 100 * 1024 * 1024
 # 两档成片规格（与 VideoAspect.to_resolution 完全一致，保持"图 → 片段 →
 # 成片"全链路同分辨率，避免渲染阶段再放大/裁剪浪费算力丢画质）：
 # 竖屏 Shorts（YouTube Shorts / TikTok）1080x1920，横屏 YouTube 1920x1080，
@@ -2135,6 +2139,165 @@ def generate_images_firefly(
     return [item]
 
 
+def _validate_firefly_video_file(video_path: str) -> float:
+    if not 0 < os.path.getsize(video_path) <= FIREFLY_VIDEO_MAX_BYTES:
+        raise ValueError("Firefly video is empty or too large")
+    material_upload._validate_video(video_path)
+    duration = _get_downloaded_video_duration(video_path)
+    if duration < 1 / 30:
+        raise ValueError("Firefly video has no usable frame")
+    return duration
+
+
+def _request_firefly_video(prompt: str, width: int, height: int, video_path: str) -> float:
+    """Use only the existing public webhook contract; never repeat a video POST."""
+    token = str(config.app.get("firefly_webhook_token", "") or "").strip()
+    request_options = {"headers": {"Authorization": f"Bearer {token}"}} if token else {}
+    started = time.monotonic()
+    try:
+        response = requests.post(
+            _firefly_webhook_url(),
+            json={
+                "prompt": prompt, "media_type": "video", "model": FIREFLY_VIDEO_MODEL,
+                "width": width, "height": height, "duration": FIREFLY_VIDEO_DURATION,
+            },
+            proxies=config.proxy, verify=_get_tls_verify(), timeout=FIREFLY_REQUEST_TIMEOUT,
+            **request_options,
+        )
+        status = int(getattr(response, "status_code", 200) or 200)
+        body = _response_json_safely(response)
+    except Exception:
+        raise OpenAIImageUnconfirmedError(
+            "Firefly hero request was not confirmed; this task will not submit it again"
+        ) from None
+    logger.info(
+        f"firefly hero webhook responded: http={status}, elapsed_s={time.monotonic() - started:.1f}"
+    )
+    video_url = body.get("video_url") if isinstance(body, dict) and body.get("success") is True else None
+    try:
+        parsed = urlsplit(video_url) if isinstance(video_url, str) else None
+        valid_url = parsed and parsed.scheme in {"http", "https"} and parsed.netloc and not parsed.username
+    except ValueError:
+        valid_url = False
+    if status >= 400 or not valid_url:
+        raise OpenAIImageUnconfirmedError(
+            f"Firefly hero response did not confirm a video (HTTP {status}); this task will not submit it again"
+        ) from None
+
+    download = None
+    temporary_path = None
+    validated = False
+    try:
+        download = requests.get(
+            video_url, stream=True, proxies=config.proxy,
+            verify=_get_tls_verify(), timeout=(30, 120),
+        )
+        if int(getattr(download, "status_code", 200) or 200) >= 400:
+            raise ValueError("Firefly video download failed")
+        declared_size = str((getattr(download, "headers", {}) or {}).get("Content-Length", ""))
+        if declared_size.isdigit() and int(declared_size) > FIREFLY_VIDEO_MAX_BYTES:
+            raise ValueError("Firefly video download exceeds the size limit")
+        with tempfile.NamedTemporaryFile(
+            dir=Path(video_path).parent, prefix=f".{Path(video_path).stem}.", suffix=".mp4", delete=False
+        ) as video_file:
+            temporary_path = video_file.name
+            size = 0
+            for chunk in download.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > FIREFLY_VIDEO_MAX_BYTES:
+                    raise ValueError("Firefly video download exceeds the size limit")
+                video_file.write(chunk)
+        duration = _validate_firefly_video_file(temporary_path)
+        validated = True
+        os.replace(temporary_path, video_path)
+        temporary_path = None
+        return duration
+    except Exception:
+        raise OpenAIImagePaidResultError(
+            "generated Firefly hero video could not be saved or validated; automatic resubmission is disabled"
+        ) from None
+    finally:
+        if download is not None:
+            try:
+                download.close()
+            except Exception:
+                pass
+        if temporary_path is not None:
+            if validated:
+                logger.warning(f"saved Firefly hero recovery file: {Path(temporary_path).name}")
+            else:
+                try:
+                    Path(temporary_path).unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning(
+                        f"failed to remove invalid Firefly video: error={type(exc).__name__}"
+                    )
+
+
+def _generate_firefly_hero(
+    task_id: str, search_term: str, video_aspect: VideoAspect, *, scene_prompt: bool = False
+) -> MaterialInfo:
+    """Keep a decoded native video and its request marker within this task only."""
+    width, height = _firefly_image_size(video_aspect)
+    prompt = search_term if scene_prompt else _firefly_prompt(search_term)
+    cache_key = hashlib.sha256(
+        f"{prompt}|{FIREFLY_VIDEO_MODEL}|{width}x{height}|video|{FIREFLY_VIDEO_DURATION}".encode("utf-8")
+    ).hexdigest()
+    task_root = Path(utils.task_dir(task_id)).resolve()
+    video_path = str(task_root / f"firefly-hero-{cache_key}.mp4")
+    try:
+        video_path, fresh_request = task_artifacts.reserve_firefly_video(task_id, cache_key, video_path)
+    except Exception:
+        raise OpenAIImagePaidResultError(
+            "Firefly hero retry manifest could not be safely reserved; no new video request was sent"
+        ) from None
+    if Path(video_path).resolve().parent != task_root:
+        raise OpenAIImagePaidResultError("Firefly hero cache does not belong to this task")
+    if os.path.exists(video_path):
+        try:
+            duration = _validate_firefly_video_file(video_path)
+        except Exception:
+            raise OpenAIImagePaidResultError(
+                "saved Firefly hero video is unusable; this task will not generate another one"
+            ) from None
+        logger.info("reusing a valid native Firefly video from this task's previous attempt")
+    elif not fresh_request:
+        raise OpenAIImageUnconfirmedError(
+            "this task already requested a Firefly hero but no usable video remains; automatic resubmission is disabled"
+        )
+    else:
+        duration = _request_firefly_video(prompt, width, height, video_path)
+    item = MaterialInfo()
+    item.provider, item.url, item.duration = "firefly", video_path, duration
+    item.source_info = {
+        "provider": "firefly", "search_term": search_term,
+        "rendition": {"id": FIREFLY_VIDEO_MODEL, "width": width, "height": height},
+    }
+    return item
+
+
+def _fill_firefly_hero(hero: MaterialInfo, filler_path: str, hold: float, hero_hold: float, aspect: VideoAspect) -> str:
+    """Join the native opening and zoom filler without touching either saved source."""
+    output_path = str(Path(hero.url).parent / f"firefly-hero-filled-{uuid.uuid4().hex}.mp4")
+    try:
+        result = video.combine_videos(
+            combined_video_path=output_path, video_paths=[hero.url, filler_path], audio_file="",
+            video_aspect=aspect, video_concat_mode=VideoConcatMode.sequential,
+            max_clip_duration=math.ceil(hold), target_duration=hold,
+            cut_times=[0, hero_hold, hold], strict_cut_order=True,
+        )
+        if not result:
+            raise ValueError("native video and zoom filler could not be joined")
+        return result
+    except Exception:
+        Path(output_path).unlink(missing_ok=True)
+        raise OpenAIImagePaidResultError(
+            "Firefly hero and zoom filler could not be joined; saved sources can be reused on task retry"
+        ) from None
+
+
 def _get_firefly_concurrency() -> int:
     try:
         concurrency = int(config.app.get("firefly_concurrency", 1))
@@ -2154,6 +2317,7 @@ def _download_videos_firefly_parallel(
     scene_prompts: bool = False,
     retry_images: dict[str, str] | None = None,
     clip_durations: list[float] | None = None,
+    hero: MaterialInfo | None = None,
 ) -> list[str]:
     """Generate only the needed scenes in waves, retaining script order."""
     scene_options = {"scene_prompt": True} if scene_prompts else {}
@@ -2163,13 +2327,16 @@ def _download_videos_firefly_parallel(
     stop = threading.Event()
     results_lock = threading.Lock()
     results: dict[int, list[tuple[str, float, dict | None]]] = {}
+    hero_sources = [_material_source_record(hero, hero.url)] if hero is not None else []
+    if hero_sources:
+        _persist_material_sources(task_id, hero_sources)
 
     def ordered_results():
         with results_lock:
             clips = [clip for index in sorted(results) for clip in results[index]]
         return (
             [clip[0] for clip in clips],
-            [clip[2] for clip in clips if clip[2] is not None],
+            hero_sources + [clip[2] for clip in clips if clip[2] is not None],
             sum(clip[1] for clip in clips),
         )
 
@@ -2179,27 +2346,42 @@ def _download_videos_firefly_parallel(
             return
         try:
             hold = clip_durations[index] if clip_durations is not None else max_clip_duration
+            first_hero = hero is not None and index == 0
+            hero_hold = 0.0
+            if first_hero:
+                if clip_durations is None:
+                    hold = min(hold, required_duration)
+                hero_hold = min(hold, math.floor(hero.duration * 30) / 30)
+                if hero_hold >= hold:
+                    with results_lock:
+                        results[index] = [(hero.url, hold, None)]
+                    return
+            image_hold = hold - hero_hold
             items = generate_images_firefly(
                 search_term=search_term,
-                minimum_duration=math.ceil(hold) if clip_durations is not None else max_clip_duration,
+                minimum_duration=math.ceil(image_hold) if clip_durations is not None or first_hero else max_clip_duration,
                 video_aspect=video_aspect,
                 save_dir=material_directory,
                 task_id=task_id,
                 retry_images=retry_images,
                 **scene_options,
             )
-            if clip_durations is not None and len(items) != 1:
+            if (clip_durations is not None or first_hero) and len(items) != 1:
                 raise OpenAIImagePaidResultError(
                     "a DIY paragraph image is missing; saved images can be reused on task retry"
+                    if clip_durations is not None else
+                    "a hero filler image is missing; saved images can be reused on task retry"
                 )
             for item in items:
-                camera_options = {"clip_index": index} if clip_durations is not None else {}
-                video_file = _render_openai_image_video(item.url, hold, **camera_options)
+                camera_options = {"clip_index": index} if clip_durations is not None or first_hero else {}
+                video_file = _render_openai_image_video(item.url, image_hold, **camera_options)
                 if not video_file:
                     raise OpenAIImagePaidResultError(
                         "generated image could not be rendered locally"
                     )
-                if clip_durations is not None:
+                if first_hero:
+                    video_file = _fill_firefly_hero(hero, video_file, hold, hero_hold, video_aspect)
+                if clip_durations is not None or first_hero:
                     item.duration = hold
                 record = None
                 try:
@@ -2269,6 +2451,7 @@ def _download_videos_firefly_on_demand(
     material_directory: str,
     scene_prompts: bool = False,
     clip_durations: list[float] | None = None,
+    hero_shot: bool = False,
 ) -> List[str]:
     """
     按脚本片段顺序逐张生成 Firefly 文生图素材，凑够所需总时长立即停止。
@@ -2306,7 +2489,14 @@ def _download_videos_firefly_on_demand(
         ):
             raise ValueError("DIY requires a positive hold for each scene prompt")
         clip_durations = [float(hold) for hold in clip_durations]
-    if _get_firefly_concurrency() > 1 or clip_durations is not None:
+    hero = None
+    if hero_shot and search_terms:
+        try:
+            hero = _generate_firefly_hero(task_id, search_terms[0], video_aspect, **scene_options)
+        except Exception:
+            _persist_material_sources(task_id, [])
+            raise
+    if _get_firefly_concurrency() > 1 or clip_durations is not None or hero is not None:
         return _download_videos_firefly_parallel(
             task_id=task_id,
             search_terms=search_terms,
@@ -2317,6 +2507,7 @@ def _download_videos_firefly_on_demand(
             scene_prompts=scene_prompts,
             retry_images=retry_images,
             **({"clip_durations": clip_durations} if clip_durations is not None else {}),
+            **({"hero": hero} if hero is not None else {}),
         )
 
     for search_term in search_terms:
@@ -2688,6 +2879,7 @@ def download_videos(
     progress_callback: Callable[[float], None] | None = None,
     firefly_scene_prompts: bool = False,
     firefly_clip_durations: list[float] | None = None,
+    firefly_hero_shot: bool = False,
 ) -> List[str]:
     """
     搜索并下载覆盖配音时长所需的素材，返回本地文件路径。
@@ -2801,6 +2993,8 @@ def download_videos(
         scene_options = {"scene_prompts": True} if firefly_scene_prompts else {}
         if firefly_clip_durations is not None:
             scene_options["clip_durations"] = firefly_clip_durations
+        if firefly_hero_shot:
+            scene_options["hero_shot"] = True
         return _download_videos_firefly_on_demand(
             task_id=task_id,
             search_terms=search_terms,

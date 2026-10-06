@@ -352,7 +352,7 @@ def generate_script(task_id, params):
 
 def _materials_follow_script(params) -> bool:
     return params.match_materials_to_script or video.is_diy_step_mode(params) or (
-        params.video_source == "firefly" and params.firefly_scene_prompts
+        params.video_source == "firefly" and (params.firefly_scene_prompts or params.firefly_hero_shot)
     )
 
 
@@ -854,6 +854,8 @@ def get_video_materials(
         )
         if step_durations is not None:
             scene_options["firefly_clip_durations"] = step_durations
+        if params.video_source == "firefly" and params.firefly_hero_shot:
+            scene_options["firefly_hero_shot"] = True
         try:
             downloaded_videos = material.download_videos(
                 task_id=task_id,
