@@ -96,7 +96,7 @@ _VIDEO_MUSIC_PROVIDERS = {
 _SUPPORTED_VIDEO_SOURCES = frozenset({
     "pexels", "pixabay", "coverr", "local", "wavespeed",
     "volcengine_seedance", "ofox", "metaso_minimax", "muapi",
-    "loomloom", "openai_image",
+    "loomloom", "openai_image", "firefly",
 })
 
 
@@ -351,7 +351,7 @@ def generate_script(task_id, params):
 
 
 def _materials_follow_script(params) -> bool:
-    return params.match_materials_to_script or (
+    return params.match_materials_to_script or video.is_diy_step_mode(params) or (
         params.video_source == "firefly" and params.firefly_scene_prompts
     )
 
@@ -369,10 +369,15 @@ def generate_terms(task_id, params, video_script):
         )
         terms_options = {"terms_prompt": terms_prompt} if terms_prompt else {}
         params.firefly_scene_prompts = bool(terms_prompt)
+        terms_amount = (
+            max(1, len(voice.split_script_paragraphs(video_script)))
+            if video.is_diy_step_mode(params)
+            else 8 if params.match_materials_to_script else 5
+        )
         video_terms = llm.generate_terms(
             video_subject=params.video_subject,
             video_script=utils.remove_pause_tags(video_script),
-            amount=8 if params.match_materials_to_script else 5,
+            amount=terms_amount,
             match_script_order=_materials_follow_script(params),
             **terms_options,
         )
@@ -763,6 +768,7 @@ def get_video_materials(
     video_terms,
     audio_duration,
     loomloom_video_request: loomloom.LoomLoomConfirmedVideoRequest | None = None,
+    step_durations: list[float] | None = None,
 ):
     if params.video_source == "local":
         logger.info("\n\n## preprocess local materials")
@@ -846,6 +852,8 @@ def get_video_materials(
             {"firefly_scene_prompts": True}
             if params.video_source == "firefly" and params.firefly_scene_prompts else {}
         )
+        if step_durations is not None:
+            scene_options["firefly_clip_durations"] = step_durations
         try:
             downloaded_videos = material.download_videos(
                 task_id=task_id,
@@ -857,7 +865,10 @@ def get_video_materials(
                     if _materials_follow_script(params)
                     else params.video_concat_mode
                 ),
-                audio_duration=audio_duration * params.video_count,
+                audio_duration=(
+                    audio_duration if step_durations is not None
+                    else audio_duration * params.video_count
+                ),
                 max_clip_duration=params.video_clip_duration,
                 match_script_order=_materials_follow_script(params),
                 # 素材阶段占用 40%~50%：每下完一个文件推进一次，慢速网络下
@@ -1017,7 +1028,8 @@ def _get_material_source_groups(task_id: str, video_paths: list[str]) -> dict[st
 
 
 def generate_final_videos(
-    task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration
+    task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration,
+    step_durations: list[float] | None = None,
 ):
     final_video_paths = []
     combined_video_paths = []
@@ -1057,6 +1069,21 @@ def generate_final_videos(
             )
             timed_options["cut_times"] = beat_info["cut_times"]
         task_artifacts.patch_script_data(task_id, beat_analysis=beat_info)
+    elif step_durations is not None:
+        if len(downloaded_videos) != len(step_durations) or any(
+            not math.isfinite(float(hold)) or float(hold) <= 0
+            for hold in step_durations
+        ):
+            raise ValueError("DIY requires one valid video per script paragraph")
+        cuts = [0.0]
+        for hold in step_durations:
+            cuts.append(cuts[-1] + float(hold))
+        if not math.isclose(cuts[-1], audio_duration, abs_tol=1 / video.fps):
+            raise ValueError("DIY paragraph holds must cover the narration")
+        cuts[-1] = float(audio_duration)
+        timed_options = {
+            "target_duration": audio_duration, "cut_times": cuts, "strict_cut_order": True,
+        }
 
     _progress = 50
     for i in range(params.video_count):
@@ -1750,6 +1777,14 @@ def _run_pipeline(
                 "failed to generate video search terms",
             )
 
+    if (
+        stop_at in {"materials", "video"} and video.is_diy_step_mode(params)
+        and len(video_terms) != len(voice.split_script_paragraphs(video_script))
+    ):
+        return _mark_task_failed(
+            task_id, "terms", "DIY Firefly requires one scene prompt per script paragraph"
+        )
+
     save_script_data(task_id, video_script, video_terms, params)
 
     if stop_at == "terms":
@@ -1838,12 +1873,18 @@ def _run_pipeline(
     sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
     # 5. Get video materials
+    step_options = {}
+    if video.is_diy_step_mode(params):
+        durations = voice.script_paragraph_durations(video_script, audio_duration, sub_maker)
+        step_options["step_durations"] = durations
+        task_artifacts.patch_script_data(task_id, diy_step_durations=durations)
     downloaded_videos = get_video_materials(
         task_id,
         params,
         video_terms,
         audio_duration,
         loomloom_video_request=loomloom_video_request,
+        **step_options,
     )
     if not downloaded_videos:
         return _mark_task_failed(
@@ -1877,6 +1918,7 @@ def _run_pipeline(
             audio_file,
             subtitle_path,
             audio_duration,
+            **step_options,
         )
     )
 

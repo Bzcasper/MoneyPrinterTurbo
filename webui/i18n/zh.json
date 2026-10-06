@@ -621,6 +621,7 @@
     "Beat Key": "节拍调性",
     "Beat Genre": "节拍风格",
     "Beat Lease URL": "节拍授权链接",
-    "Beat Publishing Metadata": "节拍标题、简介和标签"
+    "Beat Publishing Metadata": "节拍标题、简介和标签",
+    "DIY Step Visuals Help": "每个脚本段落使用一张图片，持续到该段旁白结束。镜头依次使用左移、右移、倾斜和平缓缩小。"
   }
 }

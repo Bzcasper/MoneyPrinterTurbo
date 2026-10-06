@@ -5273,7 +5273,11 @@ def _render_script_settings(panel, params):
                             lambda app_config_snapshot: llm.generate_terms(
                                 params.video_subject,
                                 params.video_script,
-                                amount=8 if params.match_materials_to_script else 5,
+                                amount=(
+                                    max(1, len(voice.split_script_paragraphs(params.video_script)))
+                                    if video.is_diy_step_mode(params)
+                                    else 8 if params.match_materials_to_script else 5
+                                ),
                                 match_script_order=params.match_materials_to_script or bool(terms_prompt),
                                 app_config=app_config_snapshot,
                                 **terms_options,
@@ -5292,6 +5296,8 @@ def _render_script_settings(panel, params):
                     help=tr("Firefly Scene Prompts Help"),
                     key="firefly_scene_prompts_input",
                 )
+                if video.is_diy_step_mode(params):
+                    st.caption(tr("DIY Step Visuals Help"))
             terms_text = st.text_area(
                 tr("Firefly Scene Prompts") if params.firefly_scene_prompts else tr("Video Keywords"),
                 help=tr("Firefly Scene Prompts Help") if params.firefly_scene_prompts else tr("Video Keywords Help"),

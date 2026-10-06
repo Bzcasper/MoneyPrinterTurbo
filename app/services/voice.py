@@ -542,6 +542,82 @@ def estimate_no_voice_duration(text: str) -> float:
     return max(3.0, cjk_duration + word_duration + other_text_duration + pause_duration)
 
 
+def split_script_paragraphs(text: str) -> list[str]:
+    """Count spoken paragraphs, preserving single line breaks inside a step."""
+    return [
+        paragraph.strip()
+        for paragraph in re.split(r"\n\s*\n", utils.remove_pause_tags(text or ""))
+        if paragraph.strip()
+    ]
+
+
+def script_paragraph_durations(text: str, duration: float, sub_maker=None) -> list[float]:
+    """Hold each paragraph to its narration boundary, or proportionally to its text."""
+    paragraphs = split_script_paragraphs(text)
+    duration = float(duration)
+    if not paragraphs or not math.isfinite(duration) or duration <= 0:
+        raise ValueError("paragraph timing requires spoken text and a positive duration")
+
+    def normalize(value):
+        value = unicodedata.normalize("NFKC", unescape(value))
+        return re.sub(r"[\W_]+", "", _format_text(value).casefold())
+
+    normalized = [normalize(paragraph) for paragraph in paragraphs]
+    units = []
+    try:
+        cues = getattr(sub_maker, "cues", None) or []
+        if cues:
+            units = [
+                (normalize(cue.content), cue.start.total_seconds(), cue.end.total_seconds())
+                for cue in cues
+            ]
+        else:
+            units = [
+                (normalize(content), start / 10000000, end / 10000000)
+                for content, (start, end) in zip(
+                    getattr(sub_maker, "subs", None) or [],
+                    getattr(sub_maker, "offset", None) or [],
+                )
+            ]
+        units = [(content, start, end) for content, start, end in units if content]
+        if (
+            any(not paragraph for paragraph in normalized)
+            or "".join(content for content, _, _ in units) != "".join(normalized)
+            or any(
+                not math.isfinite(start) or not math.isfinite(end)
+                or start < 0 or end <= start or end > duration
+                for _, start, end in units
+            )
+            or any(right[1] < left[2] for left, right in zip(units, units[1:]))
+        ):
+            raise ValueError("narration boundaries do not match the script")
+        boundaries = [0.0]
+        unit_index = 0
+        consumed = 0
+        target = 0
+        for paragraph in normalized[:-1]:
+            target += len(paragraph)
+            while consumed + len(units[unit_index][0]) < target:
+                consumed += len(units[unit_index][0])
+                unit_index += 1
+            content, start, end = units[unit_index]
+            fraction = (target - consumed) / len(content)
+            boundary = start + (end - start) * fraction
+            if fraction == 1 and unit_index + 1 < len(units):
+                boundary = units[unit_index + 1][1]
+            if not boundaries[-1] < boundary < duration:
+                raise ValueError("paragraph boundaries must increase")
+            boundaries.append(boundary)
+        boundaries.append(duration)
+        return [end - start for start, end in zip(boundaries, boundaries[1:])]
+    except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
+        logger.info("DIY paragraph timing uses text proportions; narration boundaries are unavailable")
+        weights = [max(len(paragraph), 1) for paragraph in normalized]
+        durations = [duration * weight / sum(weights) for weight in weights]
+        durations[-1] = duration - sum(durations[:-1])
+        return durations
+
+
 def generate_silent_audio(duration_seconds: float, output_file: str) -> bool:
     """
     生成静音音频。

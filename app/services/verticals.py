@@ -19,7 +19,8 @@ Include a short safety note only where the tools or materials require it.
 Use natural spoken transitions and concrete instructions, without intro fluff."""
 
 DIY_TERMS_PROMPT = """Return {amount} complete English scene prompts as a JSON array of strings,
-and nothing else. Follow the script order. Each scene description must contain
+and nothing else. Use one scene per script paragraph, in paragraph order.
+Each scene description must contain
 twenty to thirty-five words before its mandatory style suffix. Describe one
 scene and one simple action, using close-ups or macro views of hands, tools
 and materials. Show no faces, readable text, logos, brands or numbers. Use a

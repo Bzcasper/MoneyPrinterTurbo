@@ -1717,14 +1717,17 @@ def generate_images_openai(
     return [item]
 
 
-def _render_openai_image_video(image_path: str, clip_duration: int) -> str:
+def _render_openai_image_video(
+    image_path: str, clip_duration: float, *, clip_index: int | None = None
+) -> str:
     """
     把生成的图片渲染成 mp4 片段，复用 local 素材的"图片 → 动态片段"管线。
 
     渲染失败返回空字符串，由调用方停止后续付费请求。
     """
     try:
-        return video.render_image_zoom_video(image_path, clip_duration)
+        camera_options = {"clip_index": clip_index} if clip_index is not None else {}
+        return video.render_image_zoom_video(image_path, clip_duration, **camera_options)
     except Exception as e:
         logger.error(
             "failed to render generated image as a video clip: "
@@ -2150,6 +2153,7 @@ def _download_videos_firefly_parallel(
     material_directory: str,
     scene_prompts: bool = False,
     retry_images: dict[str, str] | None = None,
+    clip_durations: list[float] | None = None,
 ) -> list[str]:
     """Generate only the needed scenes in waves, retaining script order."""
     scene_options = {"scene_prompt": True} if scene_prompts else {}
@@ -2174,21 +2178,29 @@ def _download_videos_firefly_parallel(
         if stop.is_set():
             return
         try:
+            hold = clip_durations[index] if clip_durations is not None else max_clip_duration
             items = generate_images_firefly(
                 search_term=search_term,
-                minimum_duration=max_clip_duration,
+                minimum_duration=math.ceil(hold) if clip_durations is not None else max_clip_duration,
                 video_aspect=video_aspect,
                 save_dir=material_directory,
                 task_id=task_id,
                 retry_images=retry_images,
                 **scene_options,
             )
+            if clip_durations is not None and len(items) != 1:
+                raise OpenAIImagePaidResultError(
+                    "a DIY paragraph image is missing; saved images can be reused on task retry"
+                )
             for item in items:
-                video_file = _render_openai_image_video(item.url, max_clip_duration)
+                camera_options = {"clip_index": index} if clip_durations is not None else {}
+                video_file = _render_openai_image_video(item.url, hold, **camera_options)
                 if not video_file:
                     raise OpenAIImagePaidResultError(
                         "generated image could not be rendered locally"
                     )
+                if clip_durations is not None:
+                    item.duration = hold
                 record = None
                 try:
                     record = _material_source_record(item, video_file)
@@ -2199,7 +2211,7 @@ def _download_videos_firefly_parallel(
                     )
                 with results_lock:
                     results.setdefault(index, []).append(
-                        (video_file, min(max_clip_duration, item.duration), record)
+                        (video_file, min(hold, item.duration), record)
                     )
         except Exception:
             stop.set()
@@ -2212,8 +2224,13 @@ def _download_videos_firefly_parallel(
     next_index = 0
     total_duration = 0.0
     try:
-        while next_index < len(search_terms) and total_duration < required_duration:
-            needed = math.ceil((required_duration - total_duration) / max_clip_duration)
+        while next_index < len(search_terms) and (
+            clip_durations is not None or total_duration < required_duration
+        ):
+            needed = (
+                len(search_terms) if clip_durations is not None
+                else math.ceil((required_duration - total_duration) / max_clip_duration)
+            )
             end_index = min(next_index + needed, len(search_terms))
             futures = [
                 executor.submit(
@@ -2251,6 +2268,7 @@ def _download_videos_firefly_on_demand(
     max_clip_duration: int,
     material_directory: str,
     scene_prompts: bool = False,
+    clip_durations: list[float] | None = None,
 ) -> List[str]:
     """
     按脚本片段顺序逐张生成 Firefly 文生图素材，凑够所需总时长立即停止。
@@ -2281,7 +2299,14 @@ def _download_videos_firefly_on_demand(
 
     # Snapshot at attempt start: fresh images are reused only on a task retry.
     retry_images = task_artifacts.read_firefly_image_manifest(task_id)
-    if _get_firefly_concurrency() > 1:
+    if clip_durations is not None:
+        if len(clip_durations) != len(search_terms) or any(
+            not math.isfinite(float(hold)) or float(hold) <= 0
+            for hold in clip_durations
+        ):
+            raise ValueError("DIY requires a positive hold for each scene prompt")
+        clip_durations = [float(hold) for hold in clip_durations]
+    if _get_firefly_concurrency() > 1 or clip_durations is not None:
         return _download_videos_firefly_parallel(
             task_id=task_id,
             search_terms=search_terms,
@@ -2291,6 +2316,7 @@ def _download_videos_firefly_on_demand(
             material_directory=material_directory,
             scene_prompts=scene_prompts,
             retry_images=retry_images,
+            **({"clip_durations": clip_durations} if clip_durations is not None else {}),
         )
 
     for search_term in search_terms:
@@ -2661,6 +2687,7 @@ def download_videos(
     match_script_order: bool = False,
     progress_callback: Callable[[float], None] | None = None,
     firefly_scene_prompts: bool = False,
+    firefly_clip_durations: list[float] | None = None,
 ) -> List[str]:
     """
     搜索并下载覆盖配音时长所需的素材，返回本地文件路径。
@@ -2772,6 +2799,8 @@ def download_videos(
         # 与 openai_image 相同的按需语义：单张生成耗时数分钟，逐段生成、
         # 凑够配音时长立即停止；产物是会过期的签名地址，不参与搜索缓存。
         scene_options = {"scene_prompts": True} if firefly_scene_prompts else {}
+        if firefly_clip_durations is not None:
+            scene_options["clip_durations"] = firefly_clip_durations
         return _download_videos_firefly_on_demand(
             task_id=task_id,
             search_terms=search_terms,

@@ -133,6 +133,7 @@ _DEFAULT_ENCODE_THREADS = min(8, os.cpu_count() or 4)
 # 中间产物（zoom 片段等一定会被再次转码）用 veryfast：编码快数倍，
 # 同 CRF 下画质差异在二次编码后可忽略；最终成片保持默认 preset 不降质。
 _INTERMEDIATE_ENCODE_PRESET = "veryfast"
+_IMAGE_CAMERA_MOVES = ("pan-left", "pan-right", "tilt", "zoom-out")
 
 
 def _get_subtitle_spring_scale(time_seconds: float, duration_seconds: float) -> float:
@@ -967,6 +968,13 @@ def is_beat_length_mode(params) -> bool:
     )
 
 
+def is_diy_step_mode(params) -> bool:
+    return (
+        getattr(params, "content_vertical", "none") == "diy"
+        and getattr(params, "video_source", "") == "firefly"
+    )
+
+
 def _beat_cut_times(events, duration: float, max_clip_duration: float) -> list[float]:
     """Choose detected events near the hold limit, with uniform cuts in quiet gaps."""
     max_hold = max(float(max_clip_duration), 1 / fps)
@@ -1143,10 +1151,16 @@ def combine_videos(
     progress_callback: Callable[[float], None] | None = None,
     target_duration: float | None = None,
     cut_times: list[float] | None = None,
+    strict_cut_order: bool = False,
 ) -> str:
     # Pydantic leaves this optional default as the string "random" unless
     # explicitly provided. Normalize it once for all downstream enum access.
     video_concat_mode = VideoConcatMode(video_concat_mode or VideoConcatMode.random)
+    if strict_cut_order and (
+        cut_times is None or len(video_paths) != len(cut_times) - 1
+        or video_concat_mode != VideoConcatMode.sequential
+    ):
+        raise ValueError("DIY requires one ordered video per paragraph")
     audio_clip = AudioFileClip(audio_file)
     try:
         # 这里只需要读取旁白音频时长来决定素材视频拼接长度；后续不会再使用
@@ -1212,6 +1226,8 @@ def combine_videos(
             logger.warning(
                 f"skipping unreadable video source: path={video_path}, error={exc}"
             )
+            if strict_cut_order:
+                raise RuntimeError("a DIY paragraph video is unreadable") from exc
             continue
         finally:
             close_clip(clip)
@@ -1219,7 +1235,10 @@ def combine_videos(
         start_time = 0
 
         while start_time < clip_duration:
-            end_time = min(start_time + source_clip_duration, clip_duration)
+            end_time = (
+                clip_duration if cut_times is not None and video_concat_mode == VideoConcatMode.sequential
+                else min(start_time + source_clip_duration, clip_duration)
+            )
 
             # 保留所有有效分段。
             # 这样既不会丢掉“整段视频本身就短于 max_clip_duration”的素材，
@@ -1379,13 +1398,15 @@ def combine_videos(
         next_candidate_index = 0
         while (
             next_candidate_index < len(subclipped_items)
-            and video_duration < required_video_duration
+            and (strict_cut_order or video_duration < required_video_duration)
         ):
             remaining_duration = required_video_duration - video_duration
             batch = []
             batch_duration = 0.0
             candidate_index = next_candidate_index
-            while candidate_index < len(subclipped_items) and batch_duration < remaining_duration:
+            while candidate_index < len(subclipped_items) and (
+                strict_cut_order or batch_duration < remaining_duration
+            ):
                 subclipped_item = subclipped_items[candidate_index]
                 source_duration = subclipped_item.end_time - subclipped_item.start_time
                 output_duration = (
@@ -1398,7 +1419,16 @@ def combine_videos(
                 candidate_index += 1
             if not batch:
                 break
-            for processed_clip in executor.map(process_clip_in_task_scope, batch):
+            batch_results = executor.map(process_clip_in_task_scope, batch)
+            if strict_cut_order:
+                batch_results = list(batch_results)
+                if any(clip is None for clip in batch_results):
+                    delete_files([
+                        clip.file_path for clip in [*processed_clips, *batch_results]
+                        if clip is not None
+                    ])
+                    raise RuntimeError("could not render every DIY paragraph video")
+            for processed_clip in batch_results:
                 if processed_clip is None:
                     continue
                 processed_clips.append(processed_clip)
@@ -1415,7 +1445,7 @@ def combine_videos(
             next_candidate_index = candidate_index
 
     # loop processed clips until the video duration covers the audio duration and the small safety margin.
-    if video_duration < required_video_duration:
+    if video_duration < required_video_duration and not strict_cut_order:
         logger.warning(
             f"video duration ({video_duration:.2f}s) is shorter than required duration "
             f"({required_video_duration:.2f}s), looping clips to match audio length."
@@ -2048,7 +2078,9 @@ def _probe_image_size(image_path: str) -> tuple[int, int]:
     return width, height
 
 
-def _render_image_zoom_video_ffmpeg(image_path: str, clip_duration: int) -> str:
+def _render_image_zoom_video_ffmpeg(
+    image_path: str, clip_duration: float, *, clip_index: int | None = None
+) -> str:
     """
     用 ffmpeg zoompan 实现 Ken Burns 缓慢放大（替代 MoviePy 逐帧 resize）。
 
@@ -2058,24 +2090,47 @@ def _render_image_zoom_video_ffmpeg(image_path: str, clip_duration: int) -> str:
     放大到输出尺寸的 ``upscale`` 倍再取窗口，保证放大末端仍有真实像素；
     缩放速率与旧实现一致（每秒约 3%，5 秒片段终点 1.15 倍）。
     """
-    duration = max(int(clip_duration), 1)
     fps = 30
-    frames = max(1, round(duration * fps))
-    amount = 1 + duration * 0.03
+    duration = (
+        max(float(clip_duration), 1 / fps) if clip_index is not None
+        else max(int(clip_duration), 1)
+    )
+    if not math.isfinite(duration):
+        raise ValueError("image clip duration must be finite")
+    frames = max(1, math.ceil(duration * fps) if clip_index is not None else round(duration * fps))
+    amount = 1.12 if clip_index is not None else 1 + duration * 0.03
     step = (amount - 1) / frames
     out_w, out_h = _probe_image_size(image_path)
     upscale = max(2, math.ceil(amount))
     big_w, big_h = out_w * upscale, out_h * upscale
     zexpr = f"if(eq(on,0),1,min(zoom+{step:.8f},{amount:g}))"
+    xexpr = "iw/2-(iw/zoom/2)"
+    yexpr = "ih/2-(ih/zoom/2)"
+    move = ""
+    if clip_index is not None:
+        move = _IMAGE_CAMERA_MOVES[clip_index % len(_IMAGE_CAMERA_MOVES)]
+        progress = f"on/{max(frames - 1, 1)}"
+        zexpr = f"{amount:g}"
+        if move == "pan-left":
+            xexpr = f"(iw-iw/zoom)*(1-{progress})"
+        elif move == "pan-right":
+            xexpr = f"(iw-iw/zoom)*{progress}"
+        elif move == "tilt":
+            yexpr = f"(ih-ih/zoom)*{progress}"
+        else:
+            zexpr = f"max(1,{amount:g}-{(amount - 1) / max(frames - 1, 1):.10f}*on)"
     vf = (
         f"scale={big_w}:{big_h}:force_original_aspect_ratio=increase,"
         f"crop={big_w}:{big_h},"
-        f"zoompan=z='{zexpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+        f"zoompan=z='{zexpr}':x='{xexpr}':y='{yexpr}':"
         f"d={frames}:s={out_w}x{out_h}:fps={fps},"
         "setsar=1,"
         f"{_BT709_VIDEO_FILTER}"
     )
-    video_file = f"{image_path}.zoom-{duration}.mp4"
+    video_file = (
+        f"{image_path}.zoom-{duration:.6f}-{move}.mp4" if move
+        else f"{image_path}.zoom-{duration}.mp4"
+    )
     descriptor, temp_path = tempfile.mkstemp(
         prefix=".image-zoom-",
         suffix=".mp4",
@@ -2091,7 +2146,7 @@ def _render_image_zoom_video_ffmpeg(image_path: str, clip_duration: int) -> str:
             "-i",
             image_path,
             "-t",
-            f"{duration:.3f}",
+            f"{duration:.6f}" if move else f"{duration:.3f}",
             "-vf",
             vf,
             "-r",
@@ -2168,7 +2223,9 @@ def _render_image_zoom_video_moviepy(image_path: str, clip_duration: int) -> str
             delete_files(temp_path)
 
 
-def render_image_zoom_video(image_path: str, clip_duration: int = 5) -> str:
+def render_image_zoom_video(
+    image_path: str, clip_duration: float = 5, *, clip_index: int | None = None
+) -> str:
     """
     将单张本地图片渲染为带缓慢放大效果的 mp4 片段，返回输出文件路径。
 
@@ -2179,8 +2236,12 @@ def render_image_zoom_video(image_path: str, clip_duration: int = 5) -> str:
     处理。
     """
     try:
-        return _render_image_zoom_video_ffmpeg(image_path, clip_duration)
+        camera_options = {"clip_index": clip_index} if clip_index is not None else {}
+        return _render_image_zoom_video_ffmpeg(image_path, clip_duration, **camera_options)
     except Exception as e:
+        if clip_index is not None:
+            # Preserve the paid PNG for retry; do not substitute a different step or move.
+            raise
         logger.warning(
             "ffmpeg zoompan render failed, falling back to moviepy: "
             f"image={image_path}, error={type(e).__name__}, detail={e}"
