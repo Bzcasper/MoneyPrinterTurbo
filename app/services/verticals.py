@@ -170,6 +170,7 @@ def apply_vertical_to_session_state(session_state, key: str) -> dict:
         result["stable"]["video_clip_duration_select"] = preset["clip_duration"]
     if preset["voice_note"]:
         result["notes"].append(preset["voice_note"])
+    session_state["beat_length_mode_input"] = key == "type_beat"
     if key == "type_beat":
         result["notes"].append(
             "Add your beat file via Custom Background Music, or pick a "

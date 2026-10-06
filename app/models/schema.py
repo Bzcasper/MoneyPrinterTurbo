@@ -133,6 +133,15 @@ class VideoParams(BaseModel):
     bgm_type: Optional[str] = "random"
     bgm_file: Optional[str] = ""
     bgm_volume: Optional[float] = Field(default=0.2, allow_inf_nan=False)
+    beat_length_mode: bool = False
+    beat_sync_cuts: bool = True
+    beat_visual_effects: bool = True
+    beat_overlay_cards: bool = False
+    beat_title: str = Field(default="", max_length=200)
+    beat_bpm: float = Field(default=0.0, ge=0, le=400, allow_inf_nan=False)
+    beat_key: str = Field(default="", max_length=64)
+    beat_genre: str = Field(default="", max_length=100)
+    beat_lease_url: str = Field(default="", max_length=2048)
     # 视频配乐供应商共用提示词，WebUI 新任务统一写入该字段。保留下面的
     # Sonilo 专用字段以兼容旧任务记录和现有 CLI 参数。
     video_music_prompt: str = Field(default="", max_length=2000)

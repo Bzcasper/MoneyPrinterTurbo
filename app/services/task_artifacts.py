@@ -70,6 +70,19 @@ def write_script_data(task_id: str, payload: Mapping[str, Any]) -> None:
         _write_json_atomic(_script_file(task_id), payload)
 
 
+def read_script_data(task_id: str) -> dict:
+    try:
+        with _script_lock(task_id):
+            with _script_file(task_id).open("r", encoding="utf-8") as script_file:
+                payload = json.load(script_file)
+            return payload if isinstance(payload, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:
+        logger.warning(f"Cannot read task script data: {type(exc).__name__}")
+        return {}
+
+
 def patch_script_data(task_id: str, **updates: Any) -> bool:
     """
     在保留原有字段的前提下补充任务清单，失败时返回 ``False``。

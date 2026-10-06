@@ -449,6 +449,19 @@
     "OFox Upstream Vendor Help": "OFox video üretimini hangi üst akış sağlayıcısının sunacağı. BytePlus (uluslararası) tutarlı içerik politikasıyla varsayılandır; Volcano Engine Çin anakarası sağlayıcısıdır; Otomatik, OFox ağ geçidinin yükü sağlayıcılar arasında dengelemesine izin verir.",
     "OFox Vendor BytePlus": "BytePlus (uluslararası, varsayılan)",
     "OFox Vendor Volcengine": "Volcano Engine (Çin anakarası)",
-    "OFox Vendor Auto": "Otomatik (ağ geçidi yük dengeleme)"
+    "OFox Vendor Auto": "Otomatik (ağ geçidi yük dengeleme)",
+    "Type Beat Settings": "Type Beat ayarları",
+    "Beat-Length Mode": "Beat'in tam uzunluğunu kullan",
+    "Beat-Length Mode Help": "Yüklenen özel beat'i ana ses ve video süresi olarak kullanın.",
+    "Beat-Synced Cuts": "Beat ile eşzamanlı kesmeler",
+    "Noir Visual Effects": "Noir efektleri: titreşim, gren, vinyet",
+    "Show Beat Cards": "BPM, ton ve lisans kartlarını göster",
+    "Beat Title": "Beat başlığı",
+    "Beat BPM": "Beat BPM",
+    "Beat BPM Help": "Eşzamanlı kesmeler açıkken sıfır BPM'yi otomatik algılar.",
+    "Beat Key": "Beat tonu",
+    "Beat Genre": "Beat türü",
+    "Beat Lease URL": "Beat lisans URL'si",
+    "Beat Publishing Metadata": "Beat başlığı, açıklaması ve etiketleri"
   }
 }

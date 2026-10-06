@@ -449,6 +449,19 @@
     "OFox Upstream Vendor Help": "OFox 영상 생성에 사용할 업스트림 공급사입니다. BytePlus(국제)가 기본값으로 콘텐츠 정책이 일관됩니다. Volcano Engine은 중국 본토 공급사이며, 자동은 OFox 게이트웨이가 공급사 간 부하를 분산합니다.",
     "OFox Vendor BytePlus": "BytePlus (국제, 기본값)",
     "OFox Vendor Volcengine": "Volcano Engine (중국 본토)",
-    "OFox Vendor Auto": "자동 (게이트웨이 부하 분산)"
+    "OFox Vendor Auto": "자동 (게이트웨이 부하 분산)",
+    "Type Beat Settings": "타입 비트 설정",
+    "Beat-Length Mode": "비트 전체 길이 사용",
+    "Beat-Length Mode Help": "업로드한 사용자 비트를 기본 오디오와 영상 길이로 사용합니다.",
+    "Beat-Synced Cuts": "비트에 맞춘 컷",
+    "Noir Visual Effects": "누아르 효과: 깜박임, 필름 입자, 비네트",
+    "Show Beat Cards": "BPM, 조성, 라이선스 카드 표시",
+    "Beat Title": "비트 제목",
+    "Beat BPM": "비트 BPM",
+    "Beat BPM Help": "비트에 맞춘 컷을 켜면 0은 BPM을 자동으로 감지합니다.",
+    "Beat Key": "비트 조성",
+    "Beat Genre": "비트 장르",
+    "Beat Lease URL": "비트 라이선스 URL",
+    "Beat Publishing Metadata": "비트 제목, 설명, 태그"
   }
 }
