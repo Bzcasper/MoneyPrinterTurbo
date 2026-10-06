@@ -10,23 +10,45 @@ starts from prompts that already know the genre instead of generic ones.
 
 from __future__ import annotations
 
-DIY_SCRIPT_PROMPT = """Write this as a hands-on DIY tutorial. Open with the finished result in one
-enticing sentence, then teach step by step: name each step naturally ("First",
-"Next", "Then"), one action per paragraph, concrete tools and materials with
-amounts where it matters. Add one short safety or pro-tip line where relevant.
-Close with the payoff (how it looks, feels or works now) plus a one-line nudge
-to try it. Keep sentences short and speakable; no intro fluff, no headings."""
+DIY_SCRIPT_PROMPT = """Write a spoken, TTS-safe DIY tutorial in the requested language.
+Write all numbers and units as words. Use no markdown, titles, bullets, emoji,
+parentheses, welcome lines or subscribe lines. Start with a finished-result
+hook, name the materials, then give one simple step per paragraph. Close with
+the finished result and a useful tip. Keep every sentence under twenty words.
+Include a short safety note only where the tools or materials require it.
+Use natural spoken transitions and concrete instructions, without intro fluff."""
+
+DIY_TERMS_PROMPT = """Return {amount} complete English scene prompts as a JSON array of strings,
+and nothing else. Follow the script order. Each scene description must contain
+twenty to thirty-five words before its mandatory style suffix. Describe one
+scene and one simple action, using close-ups or macro views of hands, tools
+and materials. Show no faces, readable text, logos, brands or numbers. Use a
+static camera or a slow push-in. The first scene shows the finished project;
+the last shows the finished project in use. Keep the project and materials
+consistent throughout. Append exactly this suffix to every prompt:
+photorealistic, natural window light, clean wooden workbench, shallow depth of field, 4k"""
 
 DIY_IMAGE_TEMPLATE = (
     "overhead workshop photo of {term}, hands crafting, bright natural light, "
     "organized tools nearby, detailed DIY tutorial style, photorealistic"
 )
 
-TYPE_BEAT_SCRIPT_PROMPT = """This video has NO voiceover - it is a visual loop for a type beat. Write at
-most two short lines of on-screen text total (a hook line plus the producer
-tag), designed to be read in under 3 seconds. No narration, no tutorial, no
-explanation. Every keyword below must be a dark, loopable visual: neon-noir
-city, luxury cars, smoke, rain, studio gear. Keep it minimal and atmospheric."""
+TYPE_BEAT_SCRIPT_PROMPT = """Write sparse, original noir spoken-word in the requested language.
+Use two or three short lines per paragraph, with quiet atmosphere and space
+for the music. Use no artist names, real people's names, quoted lyrics or
+copyrighted characters. Keep it suitable for monetized publishing. The final
+line tells the listener to lease the beat via the link in the description.
+Use no markdown, headings or artist comparisons."""
+
+TYPE_BEAT_TERMS_PROMPT = """Return {amount} complete English scene prompts as a JSON array of strings,
+and nothing else. Each scene description must contain twenty to thirty-five
+words before its mandatory style suffix. Describe one location, its atmosphere
+and one slowly moving element. Use slow, loopable motion only. Show no faces;
+silhouettes seen from behind or far away are acceptable. Use no artist names,
+real people, brands, copyrighted characters or readable text. Vary locations
+while retaining one consistent look across all scenes. Append exactly this
+suffix to every prompt:
+dark noir, cinematic, 35mm film grain, low-key lighting, deep shadows, teal and crimson neon accents"""
 
 TYPE_BEAT_IMAGE_TEMPLATE = (
     "dark cinematic still of {term}, neon-noir lighting, rain and smoke, "
@@ -52,6 +74,7 @@ VERTICALS: dict[str, dict] = {
         "label": "No Preset",
         "description": "",
         "script_prompt": "",
+        "terms_prompt": "",
         "image_template": "",
         "aspect": "",
         "voice_mode": "",
@@ -67,6 +90,7 @@ VERTICALS: dict[str, dict] = {
             "workshop visuals, landscape YouTube format."
         ),
         "script_prompt": DIY_SCRIPT_PROMPT,
+        "terms_prompt": DIY_TERMS_PROMPT,
         "image_template": DIY_IMAGE_TEMPLATE,
         "aspect": "16:9",
         "voice_mode": "tts",
@@ -83,6 +107,7 @@ VERTICALS: dict[str, dict] = {
             "as custom background music."
         ),
         "script_prompt": TYPE_BEAT_SCRIPT_PROMPT,
+        "terms_prompt": TYPE_BEAT_TERMS_PROMPT,
         "image_template": TYPE_BEAT_IMAGE_TEMPLATE,
         "aspect": "9:16",
         "voice_mode": "none",
@@ -98,6 +123,7 @@ VERTICALS: dict[str, dict] = {
             "elegant close. Macro sparkle visuals, portrait format."
         ),
         "script_prompt": JEWELRY_SCRIPT_PROMPT,
+        "terms_prompt": "",
         "image_template": JEWELRY_IMAGE_TEMPLATE,
         "aspect": "9:16",
         "voice_mode": "tts",

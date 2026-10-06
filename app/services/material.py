@@ -2031,6 +2031,8 @@ def generate_images_firefly(
     minimum_duration: int,
     video_aspect: VideoAspect = VideoAspect.portrait,
     save_dir: str = "",
+    *,
+    scene_prompt: bool = False,
 ) -> List[MaterialInfo]:
     """
     用 Firefly 为一个脚本关键词生成一张图片并保存到本地。
@@ -2042,7 +2044,7 @@ def generate_images_firefly(
     aspect = VideoAspect(video_aspect)
     clip_duration = max(int(minimum_duration), 1)
     width, height = _firefly_image_size(aspect)
-    prompt = _firefly_prompt(search_term)
+    prompt = search_term if scene_prompt else _firefly_prompt(search_term)
     logger.info(
         "generating image via firefly webhook: "
         f"term={search_term!r}, size={width}x{height}, "
@@ -2100,8 +2102,10 @@ def _download_videos_firefly_parallel(
     required_duration: float,
     max_clip_duration: int,
     material_directory: str,
+    scene_prompts: bool = False,
 ) -> list[str]:
     """Generate only the needed scenes in waves, retaining script order."""
+    scene_options = {"scene_prompt": True} if scene_prompts else {}
     max_clip_duration = max(int(max_clip_duration), 1)
     stop = threading.Event()
     results_lock = threading.Lock()
@@ -2126,6 +2130,7 @@ def _download_videos_firefly_parallel(
                 minimum_duration=max_clip_duration,
                 video_aspect=video_aspect,
                 save_dir=material_directory,
+                **scene_options,
             )
             for item in items:
                 video_file = _render_openai_image_video(item.url, max_clip_duration)
@@ -2194,6 +2199,7 @@ def _download_videos_firefly_on_demand(
     audio_duration: float,
     max_clip_duration: int,
     material_directory: str,
+    scene_prompts: bool = False,
 ) -> List[str]:
     """
     按脚本片段顺序逐张生成 Firefly 文生图素材，凑够所需总时长立即停止。
@@ -2202,6 +2208,7 @@ def _download_videos_firefly_on_demand(
     时长后立即停止；也不参与 24 小时搜索缓存——产物 URL 是会过期的签名
     地址，且复用缓存会让不同任务反复得到同一张图。
     """
+    scene_options = {"scene_prompt": True} if scene_prompts else {}
     if not material_directory:
         material_directory = utils.task_dir(task_id)
 
@@ -2229,6 +2236,7 @@ def _download_videos_firefly_on_demand(
             required_duration=required_duration,
             max_clip_duration=max_clip_duration,
             material_directory=material_directory,
+            scene_prompts=scene_prompts,
         )
 
     for search_term in search_terms:
@@ -2238,6 +2246,7 @@ def _download_videos_firefly_on_demand(
                 minimum_duration=max_clip_duration,
                 video_aspect=video_aspect,
                 save_dir=material_directory,
+                **scene_options,
             )
         except OpenAIImagePaidResultError:
             # 复用同一"已生成但拿不到产物则终止任务"的计费安全信号：
@@ -2595,6 +2604,7 @@ def download_videos(
     max_clip_duration: int = 5,
     match_script_order: bool = False,
     progress_callback: Callable[[float], None] | None = None,
+    firefly_scene_prompts: bool = False,
 ) -> List[str]:
     """
     搜索并下载覆盖配音时长所需的素材，返回本地文件路径。
@@ -2705,6 +2715,7 @@ def download_videos(
     if source == "firefly":
         # 与 openai_image 相同的按需语义：单张生成耗时数分钟，逐段生成、
         # 凑够配音时长立即停止；产物是会过期的签名地址，不参与搜索缓存。
+        scene_options = {"scene_prompts": True} if firefly_scene_prompts else {}
         return _download_videos_firefly_on_demand(
             task_id=task_id,
             search_terms=search_terms,
@@ -2712,6 +2723,7 @@ def download_videos(
             audio_duration=audio_duration,
             max_clip_duration=max_clip_duration,
             material_directory=material_directory,
+            **scene_options,
         )
 
     if match_script_order:

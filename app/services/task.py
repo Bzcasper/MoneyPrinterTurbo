@@ -30,6 +30,7 @@ from app.services import (
     task_artifacts,
     twelvelabs,
     video,
+    verticals,
     volcengine_seedance,
     voice,
 )
@@ -349,6 +350,12 @@ def generate_script(task_id, params):
     return video_script
 
 
+def _materials_follow_script(params) -> bool:
+    return params.match_materials_to_script or (
+        params.video_source == "firefly" and params.firefly_scene_prompts
+    )
+
+
 def generate_terms(task_id, params, video_script):
     logger.info("\n\n## generating video terms")
     video_terms = params.video_terms
@@ -356,22 +363,37 @@ def generate_terms(task_id, params, video_script):
         # 开启素材按文案顺序匹配后，关键词本身也必须按脚本叙事顺序生成；
         # 否则后续即使顺序下载和顺序拼接，也只能复用一组全局主题词，
         # 无法改善“后面内容的画面提前出现”的问题。
+        terms_prompt = (
+            verticals.get_vertical(params.content_vertical)["terms_prompt"]
+            if params.video_source == "firefly" else ""
+        )
+        terms_options = {"terms_prompt": terms_prompt} if terms_prompt else {}
+        params.firefly_scene_prompts = bool(terms_prompt)
         video_terms = llm.generate_terms(
             video_subject=params.video_subject,
             video_script=utils.remove_pause_tags(video_script),
             amount=8 if params.match_materials_to_script else 5,
-            match_script_order=params.match_materials_to_script,
+            match_script_order=_materials_follow_script(params),
+            **terms_options,
         )
     else:
         if isinstance(video_terms, str):
-            video_terms = [term.strip() for term in re.split(r"[,，]", video_terms)]
-        elif isinstance(video_terms, list):
-            video_terms = [term.strip() for term in video_terms]
-        else:
+            if params.video_source == "firefly" and params.firefly_scene_prompts:
+                # Scene descriptions contain commas; accept one per line or JSON.
+                if video_terms.lstrip().startswith("["):
+                    try:
+                        video_terms = json.loads(video_terms)
+                    except json.JSONDecodeError as exc:
+                        raise ValueError("scene prompts must be a JSON array or one per line") from exc
+                else:
+                    video_terms = video_terms.splitlines()
+            else:
+                video_terms = re.split(r"[,，]", video_terms)
+        if not isinstance(video_terms, list) or not all(isinstance(term, str) for term in video_terms):
             raise ValueError("video_terms must be a string or a list of strings.")
 
         # Delimiter-only input must not reach paid reranking or material search.
-        video_terms = [term for term in video_terms if term]
+        video_terms = [term.strip() for term in video_terms if term.strip()]
 
         logger.debug(f"video terms: {utils.to_json(video_terms)}")
 
@@ -385,7 +407,7 @@ def generate_terms(task_id, params, video_script):
 
     # 可选的 TwelveLabs Marengo 语义重排：未启用时返回原顺序，无任何副作用。
     # 顺序匹配模式下关键词顺序本身就是脚本叙事顺序，必须保持原样，故跳过。
-    if not params.match_materials_to_script:
+    if not _materials_follow_script(params):
         video_terms = twelvelabs.rerank_terms_by_subject(
             video_subject=params.video_subject,
             search_terms=video_terms,
@@ -778,6 +800,10 @@ def get_video_materials(
         logger.info(f"\n\n## downloading videos from {params.video_source}")
         # 顺序匹配模式只在用户显式开启时生效。这里强制素材下载按关键词顺序
         # 轮询，避免某个早期关键词下载太多素材，把后续脚本主题挤出最终时间线。
+        scene_options = (
+            {"firefly_scene_prompts": True}
+            if params.video_source == "firefly" and params.firefly_scene_prompts else {}
+        )
         try:
             downloaded_videos = material.download_videos(
                 task_id=task_id,
@@ -786,15 +812,16 @@ def get_video_materials(
                 video_aspect=params.video_aspect,
                 video_concat_mode=(
                     VideoConcatMode.sequential
-                    if params.match_materials_to_script
+                    if _materials_follow_script(params)
                     else params.video_concat_mode
                 ),
                 audio_duration=audio_duration * params.video_count,
                 max_clip_duration=params.video_clip_duration,
-                match_script_order=params.match_materials_to_script,
+                match_script_order=_materials_follow_script(params),
                 # 素材阶段占用 40%~50%：每下完一个文件推进一次，慢速网络下
                 # 进度条不再长时间停在 40%。
                 progress_callback=_stage_progress_reporter(task_id, 40, 50),
+                **scene_options,
             )
         except volcengine_seedance.VolcEngineSeedanceError as exc:
             # 未确认状态和已生成但下载失败都对应一个可在方舟控制台恢复的远端
@@ -960,7 +987,7 @@ def generate_final_videos(
     material_selections = []
     source_groups = (
         _get_material_source_groups(task_id, downloaded_videos)
-        if (allocate_batch_materials and params.match_materials_to_script
+        if (allocate_batch_materials and _materials_follow_script(params)
             and params.video_source != "local")
         else {}
     )
@@ -970,7 +997,7 @@ def generate_final_videos(
         and bgm_service.should_use_bgm(params.bgm_type, params.bgm_volume)
     )
     # Matching preserves keyword order; batch allocation varies each keyword's candidates.
-    if params.match_materials_to_script:
+    if _materials_follow_script(params):
         video_concat_mode = VideoConcatMode.sequential
     elif params.video_count == 1:
         video_concat_mode = params.video_concat_mode

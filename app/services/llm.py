@@ -858,6 +858,7 @@ def generate_terms(
     amount: int = 5,
     match_script_order: bool = False,
     app_config=None,
+    terms_prompt: str = "",
 ) -> List[str]:
     video_script = utils.remove_pause_tags(video_script or "").strip()
     if match_script_order:
@@ -915,6 +916,14 @@ def generate_terms(
 Please note that you must use English for generating video search terms; Chinese is not accepted.
 """.strip()
 
+    custom_terms_prompt = str(terms_prompt or "").strip()
+    if custom_terms_prompt:
+        # Replace only the supported placeholder; literal JSON braces are safe.
+        prompt = custom_terms_prompt.replace("{amount}", str(amount)) + (
+            f"\n\nVideo subject: {video_subject}\nVideo script:\n{video_script}"
+            f"\nReturn exactly {amount} nonempty strings in a JSON array, with no extra text."
+        )
+
     logger.info(f"subject: {video_subject}, match_script_order: {match_script_order}")
 
     search_terms = []
@@ -959,6 +968,9 @@ Please note that you must use English for generating video search terms; Chinese
         # Enforce the prompt contract before material providers are contacted;
         # repeated topics remain meaningful in chronological mode.
         search_terms = [term.strip() for term in search_terms if term.strip()][:amount]
+        if custom_terms_prompt and len(search_terms) != amount:
+            logger.warning("scene prompt response did not contain the requested count")
+            search_terms = []
         if search_terms:
             break
         if i < _max_retries - 1:

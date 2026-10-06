@@ -1518,12 +1518,15 @@ def _apply_restored_params(params):
     """
     video_terms = params.get("video_terms") or ""
     if isinstance(video_terms, list):
-        video_terms = ", ".join(str(term) for term in video_terms)
+        separator = "\n" if params.get("firefly_scene_prompts") else ", "
+        video_terms = separator.join(str(term) for term in video_terms)
 
     # 文案与高级脚本设置。
     st.session_state["video_subject"] = params.get("video_subject") or ""
     st.session_state["video_script"] = params.get("video_script") or ""
     st.session_state["video_terms"] = str(video_terms)
+    st.session_state["firefly_scene_prompts_input"] = bool(params.get("firefly_scene_prompts", False))
+    _set_stable_widget_value("content_vertical_select", params.get("content_vertical") or "none")
     _set_stable_widget_value(
         "script_language_select", params.get("video_language") or ""
     )
@@ -5153,6 +5156,7 @@ def _render_script_settings(panel, params):
                         help=tr("Content Vertical Help"),
                         on_change=_apply_content_vertical,
                     )
+                    params.content_vertical = content_vertical
                     _set_runtime_config("ui", "content_vertical", content_vertical)
                     vertical_notes = st.session_state.get("content_vertical_notes", [])
                     if vertical_notes:
@@ -5231,10 +5235,15 @@ def _render_script_settings(panel, params):
                 height=180,
                 key="video_script",
             )
+            terms_prompt = (
+                verticals.get_vertical(params.content_vertical)["terms_prompt"]
+                if params.video_source == "firefly" else ""
+            )
+            terms_options = {"terms_prompt": terms_prompt} if terms_prompt else {}
             if _effective_script_generation_backend() == "loomloom":
                 st.caption(tr("LoomLoom Video Terms Reuse Help"))
             elif st.button(
-                tr("Generate Video Keywords"),
+                tr("Generate Firefly Scene Prompts") if terms_prompt else tr("Generate Video Keywords"),
                 key="auto_generate_terms",
                 use_container_width=True,
                 type="secondary",
@@ -5245,26 +5254,39 @@ def _render_script_settings(panel, params):
                     st.toast(tr("Please Enter the Video Subject"))
                     st.warning(tr("Please Enter the Video Subject"))
                 else:
-                    with st.spinner(tr("Generating Video Keywords")):
+                    with st.spinner(tr("Generating Firefly Scene Prompts") if terms_prompt else tr("Generating Video Keywords")):
                         terms = _run_llm_read_operation(
                             "generate_terms",
                             lambda app_config_snapshot: llm.generate_terms(
                                 params.video_subject,
                                 params.video_script,
                                 amount=8 if params.match_materials_to_script else 5,
-                                match_script_order=params.match_materials_to_script,
+                                match_script_order=params.match_materials_to_script or bool(terms_prompt),
                                 app_config=app_config_snapshot,
+                                **terms_options,
                             ),
                         )
                         if "Error: " in terms:
                             st.error(tr(terms))
                         else:
-                            st.session_state["video_terms"] = ", ".join(terms)
+                            st.session_state["firefly_scene_prompts_input"] = bool(terms_prompt)
+                            st.session_state["video_terms"] = ("\n" if terms_prompt else ", ").join(terms)
 
-            params.video_terms = st.text_area(
-                tr("Video Keywords"),
-                help=tr("Video Keywords Help"),
+            if params.video_source == "firefly":
+                params.firefly_scene_prompts = st.checkbox(
+                    tr("Use Firefly Scene Prompts"),
+                    value=False,
+                    help=tr("Firefly Scene Prompts Help"),
+                    key="firefly_scene_prompts_input",
+                )
+            terms_text = st.text_area(
+                tr("Firefly Scene Prompts") if params.firefly_scene_prompts else tr("Video Keywords"),
+                help=tr("Firefly Scene Prompts Help") if params.firefly_scene_prompts else tr("Video Keywords Help"),
                 key="video_terms",
+            )
+            params.video_terms = (
+                [term.strip() for term in terms_text.splitlines() if term.strip()]
+                if params.firefly_scene_prompts else terms_text
             )
 
 
@@ -8501,6 +8523,9 @@ def _render_application():
     right_panel = panel[3]
 
     params = VideoParams(video_subject="")
+    params.video_source = str(st.session_state.get(
+        localized_widget_key("video_source_select"), config.app.get("video_source", "pexels")
+    ) or "pexels")
     params.match_materials_to_script = bool(
         st.session_state.get("match_materials_to_script", False)
     )
