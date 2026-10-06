@@ -543,6 +543,42 @@ def _resolve_reusable_voice_preview(
     return preview_file, math.ceil(duration), sub_maker
 
 
+def _resolve_type_beat_audio(params) -> tuple[str, float, None]:
+    if params.bgm_type != "custom" or not params.bgm_file:
+        raise ValueError("Beat-length mode requires a custom beat file")
+    beat_file = bgm_service.resolve_bgm_file(params.bgm_file)
+    duration = float(voice.get_audio_duration(beat_file))
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError("custom beat duration is zero or invalid")
+    return beat_file, duration, None
+
+
+def generate_type_beat_metadata(params, video_script: str, bpm: float = 0.0) -> dict:
+    facts = [f"Beat title: {params.beat_title or params.video_subject}"]
+    if bpm > 0:
+        facts.append(f"BPM: {bpm:g}")
+    if params.beat_key:
+        facts.append(f"Key: {params.beat_key}")
+    if params.beat_genre:
+        facts.append(f"Genre: {params.beat_genre}")
+    if params.beat_lease_url:
+        facts.append(f"Lease link: {params.beat_lease_url}")
+    facts.extend([
+        "Write title, tags and description for this instrumental beat. "
+        "Use only these facts; do not name artists, quote lyrics, or invent licensing rights.",
+        f"Visual concept: {video_script}",
+    ])
+    metadata = llm.generate_social_metadata(
+        video_subject=params.beat_title or params.video_subject,
+        video_script="\n".join(facts),
+        language=params.video_language or "",
+        platform="youtube_shorts",
+    )
+    if params.beat_lease_url and params.beat_lease_url not in metadata.get("caption", ""):
+        metadata["caption"] = f"{metadata.get('caption', '').rstrip()}\n\nLease: {params.beat_lease_url}".strip()
+    return metadata
+
+
 def generate_audio(
     task_id,
     params,
@@ -565,6 +601,12 @@ def generate_audio(
         - sub_maker: subtitle maker object if TTS is used, None otherwise
     """
     logger.info("\n\n## generating audio")
+    if video.is_beat_length_mode(params):
+        try:
+            return _resolve_type_beat_audio(params)
+        except (OSError, ValueError) as exc:
+            _mark_task_failed(task_id, "audio", str(exc))
+            return None, None, None
     # /audio 和 /subtitle 请求模型不包含 custom_audio_file，
     # 这里统一做兼容读取，避免直调接口时抛属性错误。
     requested_custom_audio_file = getattr(params, "custom_audio_file", None)
@@ -1004,6 +1046,17 @@ def generate_final_videos(
     else:
         video_concat_mode = VideoConcatMode.random
     video_transition_mode = params.video_transition_mode
+    beat_mode = video.is_beat_length_mode(params)
+    beat_info = {"bpm": getattr(params, "beat_bpm", 0.0)}
+    timed_options = {}
+    if beat_mode:
+        timed_options["target_duration"] = audio_duration
+        if params.beat_sync_cuts:
+            beat_info = video.analyze_beat(
+                audio_file, audio_duration, params.video_clip_duration, params.beat_bpm
+            )
+            timed_options["cut_times"] = beat_info["cut_times"]
+        task_artifacts.patch_script_data(task_id, beat_analysis=beat_info)
 
     _progress = 50
     for i in range(params.video_count):
@@ -1039,6 +1092,7 @@ def generate_final_videos(
                 task_id, _progress, _progress + combine_share
             ),
             **batch_options,
+            **timed_options,
         )
         if allocate_batch_materials:
             selected_sources = list(dict.fromkeys(used_video_paths))
@@ -1069,7 +1123,7 @@ def generate_final_videos(
 
         # 视频配乐模式先明确禁用默认 BGM 解析，避免旧任务残留的 bgm_file 被
         # 误用。只有音量大于 0 才生成代理并调用付费 API；0 音量统一跳过。
-        bgm_file_override = "" if video_music_provider else None
+        bgm_file_override = "" if video_music_provider or beat_mode else None
         if video_music_requested:
             service = video_music_provider["service"]
             display_name = video_music_provider["display_name"]
@@ -1119,6 +1173,9 @@ def generate_final_videos(
                     "video_index": index,
                 }
             )
+
+        if beat_mode:
+            video.apply_type_beat_visuals(final_video_path, params, beat_info["bpm"])
 
         _progress += 50 / params.video_count / 2
         sm.state.update_task(task_id, progress=_progress)
@@ -1250,6 +1307,7 @@ def _run_cross_post(
     youtube_privacy_status: str,
     youtube_made_for_kids: bool = False,
     upload_account: dict | None = None,
+    publishing_metadata: dict | None = None,
 ) -> None:
     """后台执行跨平台发布，并只补充发布相关的任务字段。"""
     results = []
@@ -1284,7 +1342,7 @@ def _run_cross_post(
                 first = (platforms[0] or "").strip().lower()
                 # llm.py resolves unknown ids to its default platform.
                 social_platform = _CROSS_POST_SOCIAL_PLATFORMS.get(first, first)
-            metadata = llm.generate_social_metadata(
+            metadata = publishing_metadata or llm.generate_social_metadata(
                 video_subject=video_subject,
                 video_script=video_script,
                 language=video_language or "",
@@ -1397,10 +1455,10 @@ def _run_cross_post(
         _record_cross_post_failure(task_id, exc, results)
 
 
-def _run_cross_post_with_slot(*args) -> None:
+def _run_cross_post_with_slot(*args, **kwargs) -> None:
     """执行发布任务，并确保成功、失败或异常时都会归还队列容量。"""
     try:
-        _run_cross_post(*args)
+        _run_cross_post(*args, **kwargs)
     except Exception as exc:
         # _run_cross_post 已处理预期异常；这里是最后一道保护，避免未来新增
         # 逻辑抛出的异常只保存在无人读取的 Future 中。
@@ -1452,6 +1510,7 @@ def _schedule_cross_post(
     platforms: list[str],
     youtube_privacy_status: str,
     youtube_made_for_kids: bool = False,
+    publishing_metadata: dict | None = None,
 ) -> str | None:
     """提交后台发布任务；成功返回 None，调度失败返回可查询的错误原因。"""
     if not _cross_post_slots.acquire(blocking=False):
@@ -1480,6 +1539,8 @@ def _schedule_cross_post(
             youtube_privacy_status,
             youtube_made_for_kids,
             upload_post.upload_post_service.snapshot_account(),
+            **({"publishing_metadata": json.loads(json.dumps(publishing_metadata))}
+               if publishing_metadata else {}),
         )
         _register_cross_post_future(task_id, future)
         future.add_done_callback(partial(_finalize_cross_post_future, task_id))
@@ -1646,6 +1707,12 @@ def _run_pipeline(
             "in config.toml to a working ffmpeg executable",
         )
 
+    if stop_at not in ("script", "terms") and video.is_beat_length_mode(params):
+        try:
+            _resolve_type_beat_audio(params)
+        except (OSError, ValueError) as exc:
+            return _mark_task_failed(task_id, "preflight", str(exc))
+
     # 1. Generate script
     video_script = generate_script(task_id, params)
     # The LLM adapter uses a leading "Error: " as its failure sentinel. A
@@ -1721,7 +1788,8 @@ def _run_pipeline(
     if stop_at == "audio":
         # Full video jobs apply gain in the final mixer. Audio-only exports have
         # no mixer, so apply it here to an owned output (never a custom input).
-        audio_volume = 1.0 if params.voice_volume is None else float(params.voice_volume)
+        selected_volume = params.bgm_volume if video.is_beat_length_mode(params) else params.voice_volume
+        audio_volume = 1.0 if selected_volume is None else float(selected_volume)
         if audio_volume != 1.0:
             descriptor, output_file = tempfile.mkstemp(
                 prefix="audio-export-", suffix=".mp3", dir=utils.task_dir(task_id)
@@ -1819,6 +1887,14 @@ def _run_pipeline(
             "failed to generate final video",
         )
 
+    publishing_metadata = None
+    if video.is_beat_length_mode(params):
+        beat_info = task_artifacts.read_script_data(task_id).get("beat_analysis", {})
+        publishing_metadata = generate_type_beat_metadata(
+            params, video_script, beat_info.get("bpm", params.beat_bpm)
+        )
+        task_artifacts.patch_script_data(task_id, publishing_metadata=publishing_metadata)
+
     logger.success(
         f"task {task_id} finished, generated {len(final_video_paths)} videos."
     )
@@ -1854,6 +1930,8 @@ def _run_pipeline(
         "cross_post_owner": _cross_post_process_owner if should_cross_post else None,
         "warnings": generation_warnings or None,
     }
+    if publishing_metadata:
+        kwargs["publishing_metadata"] = publishing_metadata
     sm.state.update_task(
         task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs
     )
@@ -1872,6 +1950,7 @@ def _run_pipeline(
             youtube_made_for_kids=(
                 upload_post.upload_post_service.youtube_made_for_kids
             ),
+            **({"publishing_metadata": publishing_metadata} if publishing_metadata else {}),
         )
         # 队列满或线程池关闭属于同步可知的调度失败。任务状态已经由调度函数
         # 更新，这里同步修正返回快照，避免调用方收到与后续查询不一致的 pending。

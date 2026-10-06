@@ -608,6 +608,19 @@
     "MuAPI Billing Notice Without Script": "每段生成视频都会由 MuAPI 计费。填写或生成视频文案后可查看预计任务数量。",
     "Confirm MuAPI Charge": "我已了解 MuAPI 视频生成会创建付费任务",
     "Confirm MuAPI Charge Help": "MuAPI 素材按脚本片段逐段提交，凑够配音所需时长后立即停止。提交状态不明确时不会自动重试，因为远端任务可能已经创建并产生费用。",
-    "Confirm MuAPI Charge Required": "请确认 MuAPI 生成费用后再生成视频。"
+    "Confirm MuAPI Charge Required": "请确认 MuAPI 生成费用后再生成视频。",
+    "Type Beat Settings": "Type Beat 设置",
+    "Beat-Length Mode": "使用节拍完整时长",
+    "Beat-Length Mode Help": "将上传的自定义节拍作为主音轨，并以其时长决定视频长度。",
+    "Beat-Synced Cuts": "跟随节拍切镜",
+    "Noir Visual Effects": "黑色电影效果：闪烁、颗粒、暗角",
+    "Show Beat Cards": "显示 BPM、调性和授权提示卡",
+    "Beat Title": "节拍标题",
+    "Beat BPM": "节拍 BPM",
+    "Beat BPM Help": "开启节拍切镜时，零表示自动检测 BPM。",
+    "Beat Key": "节拍调性",
+    "Beat Genre": "节拍风格",
+    "Beat Lease URL": "节拍授权链接",
+    "Beat Publishing Metadata": "节拍标题、简介和标签"
   }
 }

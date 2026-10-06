@@ -1527,6 +1527,13 @@ def _apply_restored_params(params):
     st.session_state["video_terms"] = str(video_terms)
     st.session_state["firefly_scene_prompts_input"] = bool(params.get("firefly_scene_prompts", False))
     _set_stable_widget_value("content_vertical_select", params.get("content_vertical") or "none")
+    for name, default in {
+        "beat_length_mode": False, "beat_sync_cuts": True,
+        "beat_visual_effects": True, "beat_overlay_cards": False,
+        "beat_title": "", "beat_bpm": 0.0, "beat_key": "",
+        "beat_genre": "", "beat_lease_url": "",
+    }.items():
+        st.session_state[f"{name}_input"] = params.get(name, default)
     _set_stable_widget_value(
         "script_language_select", params.get("video_language") or ""
     )
@@ -2034,6 +2041,12 @@ def _render_generation_task_snapshot(task_id, task):
         return
 
     st.success(tr("Video Generation Completed"))
+    metadata = task.get("publishing_metadata")
+    if isinstance(metadata, Mapping) and metadata:
+        with st.expander(tr("Beat Publishing Metadata"), expanded=True):
+            st.text(metadata.get("title", ""))
+            st.code(metadata.get("caption", ""), language=None)
+            st.text(" ".join(metadata.get("hashtags") or []))
     for warning in task.get("warnings") or []:
         if isinstance(warning, Mapping) and warning.get("code") == "batch_materials_reused":
             st.warning(
@@ -7011,6 +7024,33 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
     return uploaded_bgm_file
 
 
+def _render_type_beat_settings(params):
+    with st.expander(tr("Type Beat Settings"), expanded=True):
+        defaults = {
+            "beat_length_mode": True, "beat_sync_cuts": True,
+            "beat_visual_effects": True, "beat_overlay_cards": False,
+            "beat_title": "", "beat_bpm": 0.0, "beat_key": "",
+            "beat_genre": "", "beat_lease_url": "",
+        }
+        for name, default in defaults.items():
+            st.session_state.setdefault(f"{name}_input", default)
+        params.beat_length_mode = st.checkbox(
+            tr("Beat-Length Mode"), key="beat_length_mode_input",
+            help=tr("Beat-Length Mode Help"),
+        )
+        params.beat_sync_cuts = st.checkbox(tr("Beat-Synced Cuts"), key="beat_sync_cuts_input")
+        params.beat_visual_effects = st.checkbox(tr("Noir Visual Effects"), key="beat_visual_effects_input")
+        params.beat_overlay_cards = st.checkbox(tr("Show Beat Cards"), key="beat_overlay_cards_input")
+        params.beat_title = st.text_input(tr("Beat Title"), key="beat_title_input", max_chars=200).strip()
+        params.beat_bpm = st.number_input(
+            tr("Beat BPM"), min_value=0.0, max_value=400.0, step=0.1,
+            key="beat_bpm_input", help=tr("Beat BPM Help"),
+        )
+        params.beat_key = st.text_input(tr("Beat Key"), key="beat_key_input", max_chars=64).strip()
+        params.beat_genre = st.text_input(tr("Beat Genre"), key="beat_genre_input", max_chars=100).strip()
+        params.beat_lease_url = st.text_input(tr("Beat Lease URL"), key="beat_lease_url_input", max_chars=2048).strip()
+
+
 def _render_audio_settings(panel, params):
     """渲染音频设置并返回上传音频与当前配音模式。"""
     with panel:
@@ -7712,6 +7752,8 @@ def _render_audio_settings(panel, params):
                 params,
                 elevenlabs_api_key_rendered=elevenlabs_api_key_rendered,
             )
+            if params.content_vertical == "type_beat" and voice_mode == VOICE_MODE_NONE:
+                _render_type_beat_settings(params)
     return uploaded_audio_file, uploaded_bgm_file, voice_mode
 
 

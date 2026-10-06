@@ -449,6 +449,19 @@
     "OFox Upstream Vendor Help": "OFox ilə video yaratmanı təmin edən əsas xidmət provayderi. BytePlus (beynəlxalq) vahid məzmun siyasəti olan standart provayderdir; Volcano Engine materik Çindəki provayderdir; avtomatik seçim OFox şlüzünə yükü provayderlər arasında tarazlaşdırmağa imkan verir.",
     "OFox Vendor BytePlus": "BytePlus (beynəlxalq, standart)",
     "OFox Vendor Volcengine": "Volcano Engine (materik Çin)",
-    "OFox Vendor Auto": "Avtomatik (şlüzdə yükün tarazlaşdırılması)"
+    "OFox Vendor Auto": "Avtomatik (şlüzdə yükün tarazlaşdırılması)",
+    "Type Beat Settings": "Type Beat parametrləri",
+    "Beat-Length Mode": "Bitin tam uzunluğundan istifadə et",
+    "Beat-Length Mode Help": "Yüklənmiş xüsusi biti əsas audio və video müddəti kimi istifadə edin.",
+    "Beat-Synced Cuts": "Bitlə sinxron kəsimlər",
+    "Noir Visual Effects": "Nuar effektləri: titrəmə, dənə, vinyet",
+    "Show Beat Cards": "BPM, tonallıq və lisenziya kartlarını göstər",
+    "Beat Title": "Bitin adı",
+    "Beat BPM": "Bit BPM",
+    "Beat BPM Help": "Sinxron kəsimlər aktiv olduqda sıfır BPM-ni avtomatik aşkarlayır.",
+    "Beat Key": "Bitin tonallığı",
+    "Beat Genre": "Bitin janrı",
+    "Beat Lease URL": "Bitin lisenziya URL-si",
+    "Beat Publishing Metadata": "Bitin adı, təsviri və teqləri"
   }
 }

@@ -449,6 +449,19 @@
     "OFox Upstream Vendor Help": "Какой вышестоящий поставщик обслуживает генерацию видео OFox. BytePlus (международный) — значение по умолчанию с единой контентной политикой; Volcano Engine — поставщик материкового Китая; Авто — шлюз OFox сам распределяет нагрузку между поставщиками.",
     "OFox Vendor BytePlus": "BytePlus (международный, по умолчанию)",
     "OFox Vendor Volcengine": "Volcano Engine (материковый Китай)",
-    "OFox Vendor Auto": "Авто (балансировка шлюзом)"
+    "OFox Vendor Auto": "Авто (балансировка шлюзом)",
+    "Type Beat Settings": "Настройки Type Beat",
+    "Beat-Length Mode": "Использовать полную длину бита",
+    "Beat-Length Mode Help": "Используйте загруженный бит как основной звук и длительность видео.",
+    "Beat-Synced Cuts": "Монтаж в ритм бита",
+    "Noir Visual Effects": "Эффекты нуар: мерцание, зерно, виньетка",
+    "Show Beat Cards": "Показать карточки BPM, тональности и лицензии",
+    "Beat Title": "Название бита",
+    "Beat BPM": "BPM бита",
+    "Beat BPM Help": "Ноль определяет BPM автоматически, если включён монтаж в ритм бита.",
+    "Beat Key": "Тональность бита",
+    "Beat Genre": "Жанр бита",
+    "Beat Lease URL": "URL лицензии бита",
+    "Beat Publishing Metadata": "Название, описание и теги бита"
   }
 }

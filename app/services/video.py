@@ -25,6 +25,7 @@ from moviepy import (
     TextClip,
     VideoFileClip,
     afx,
+    vfx,
 )
 from moviepy.video.tools.subtitles import SubtitlesClip
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -956,6 +957,175 @@ def _fit_clip_to_canvas(
     ).with_duration(clip.duration)
 
 
+def is_beat_length_mode(params) -> bool:
+    from app.services import voice
+
+    return (
+        getattr(params, "content_vertical", "none") == "type_beat"
+        and bool(getattr(params, "beat_length_mode", False))
+        and voice.is_no_voice(getattr(params, "voice_name", ""))
+    )
+
+
+def _beat_cut_times(events, duration: float, max_clip_duration: float) -> list[float]:
+    """Choose detected events near the hold limit, with uniform cuts in quiet gaps."""
+    max_hold = max(float(max_clip_duration), 1 / fps)
+    points = sorted({
+        round(float(event) * fps) / fps
+        for event in events
+        if math.isfinite(float(event)) and 0 < float(event) < duration
+    })
+    cuts = [0.0]
+    while duration - cuts[-1] > max_hold + 1 / fps:
+        start = cuts[-1]
+        limit = start + max_hold
+        candidates = [point for point in points if start + max_hold / 2 <= point <= limit]
+        if not candidates:
+            candidates = [
+                point for point in points
+                if start + min(0.5, max_hold / 2) <= point <= limit
+            ]
+        cut = candidates[-1] if candidates else round(limit * fps) / fps
+        if cut <= start:
+            break
+        cuts.append(cut)
+    cuts.append(float(duration))
+    return cuts
+
+
+def analyze_beat(
+    audio_file: str, duration: float, max_clip_duration: float, bpm: float = 0.0
+) -> dict:
+    import librosa
+
+    try:
+        samples, sample_rate = librosa.load(audio_file, sr=22050, mono=True)
+        envelope = librosa.onset.onset_strength(y=samples, sr=sample_rate)
+        options = {"bpm": bpm} if bpm > 0 else {}
+        tempo, beats = librosa.beat.beat_track(
+            onset_envelope=envelope, sr=sample_rate, units="time", **options
+        )
+        onsets = librosa.onset.onset_detect(
+            onset_envelope=envelope, sr=sample_rate, units="time"
+        )
+        detected_bpm = float(np.asarray(tempo).reshape(-1)[0])
+        if not math.isfinite(detected_bpm) or detected_bpm < 0:
+            detected_bpm = 0.0
+        events = beats if len(beats) else onsets
+        return {
+            "bpm": float(bpm) if bpm > 0 else round(detected_bpm, 1),
+            "cut_times": _beat_cut_times(events, duration, max_clip_duration),
+        }
+    except (OSError, ValueError, RuntimeError, IndexError) as exc:
+        logger.warning(f"Beat detection unavailable; using uniform cuts: {type(exc).__name__}")
+        return {
+            "bpm": float(bpm),
+            "cut_times": _beat_cut_times([], duration, max_clip_duration),
+        }
+
+
+def _plan_timed_clips(
+    items: list[SubClippedVideoClip], cut_times: list[float], clip_speed: float
+) -> list[SubClippedVideoClip]:
+    if not items:
+        return []
+    planned = []
+    for index, (start, end) in enumerate(zip(cut_times, cut_times[1:])):
+        duration = end - start
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError("cut times must increase and be finite")
+        source = items[index % len(items)]
+        planned.append(SubClippedVideoClip(
+            file_path=source.file_path,
+            start_time=source.start_time,
+            end_time=min(source.end_time, source.start_time + duration * clip_speed),
+            width=source.width,
+            height=source.height,
+            duration=duration,
+            source_file_path=source.source_file_path,
+        ))
+    return planned
+
+
+def _write_beat_card(filename: str, text: str, width: int, font_name: str) -> None:
+    card_width = max(1, min(int(width * 0.86), 1200))
+    font_size = max(12, int(card_width / 24))
+    font_path = file_security.resolve_path_within_directory(utils.font_dir(), font_name)
+    font = ImageFont.truetype(font_path, font_size)
+    text = " ".join(text.split())
+    while font.getlength(text) > card_width * 0.9 and font_size > 8:
+        font_size -= 1
+        font = ImageFont.truetype(font_path, font_size)
+    card_height = max(24, font_size * 3)
+    card = Image.new("RGBA", (card_width, card_height), (0, 0, 0, 190))
+    ImageDraw.Draw(card).text(
+        (card_width / 2, card_height / 2), text, font=font,
+        fill=(238, 245, 245, 255), anchor="mm",
+    )
+    card.save(filename, format="PNG")
+
+
+def apply_type_beat_visuals(video_path: str, params: VideoParams, bpm: float = 0.0) -> None:
+    """Atomically apply noir filters and optional cards, preserving the encoded beat."""
+    cards = []
+    if params.beat_overlay_cards:
+        details = [f"{bpm:g} BPM"] if bpm > 0 else []
+        if params.beat_key.strip():
+            details.append(params.beat_key.strip())
+        if details:
+            cards.append((" · ".join(details), "opening"))
+        if params.beat_lease_url.strip():
+            cards.append(("lease via description", "closing"))
+    if not params.beat_visual_effects and not cards:
+        return
+
+    clip = _open_video_clip_quietly(video_path)
+    try:
+        width, height = clip.size
+        duration = float(clip.duration)
+    finally:
+        close_clip(clip)
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError("invalid type-beat video duration")
+    with tempfile.TemporaryDirectory(prefix="beat-effects-", dir=os.path.dirname(video_path)) as work:
+        command = [utils.get_ffmpeg_binary(), "-y", "-i", video_path]
+        for index, (text, _) in enumerate(cards):
+            card_file = os.path.join(work, f"card-{index}.png")
+            _write_beat_card(card_file, text, width, params.font_name or "STHeitiMedium.ttc")
+            command.extend(["-loop", "1", "-i", card_file])
+        filters = (
+            "eq=brightness='0.012*sin(2*PI*t*2)':eval=frame,"
+            "noise=alls=5:allf=t+u,vignette=PI/5"
+            if params.beat_visual_effects else "null"
+        )
+        chain = [f"[0:v]{filters}[base]"]
+        current = "base"
+        for index, (_, position) in enumerate(cards):
+            window = (
+                f"between(t,0,{min(3.0, duration / 3):.6f})"
+                if position == "opening"
+                else f"gte(t,{max(0.0, duration - min(3.0, duration / 3)):.6f})"
+            )
+            output = f"card{index}"
+            chain.append(
+                f"[{current}][{index + 1}:v]overlay=x=(W-w)/2:y=H-h-{max(8, int(height * 0.08))}:"
+                f"enable='{window}'[{output}]"
+            )
+            current = output
+        chain.append(f"[{current}]{_BT709_VIDEO_FILTER}[final]")
+        output_file = os.path.join(work, "filtered.mp4")
+        command.extend([
+            "-filter_complex", ";".join(chain), "-map", "[final]", "-map", "0:a?",
+            "-c:v", "libx264", "-preset", _INTERMEDIATE_ENCODE_PRESET, "-crf", "18",
+            "-pix_fmt", "yuv420p", "-c:a", "copy", "-t", f"{duration:.9f}",
+            "-threads", str(params.n_threads or _DEFAULT_ENCODE_THREADS),
+            "-movflags", "+faststart", output_file,
+        ])
+        with _stage_heartbeat("type-beat visual effects"):
+            subprocess.run(command, capture_output=True, timeout=600, check=True)
+        os.replace(output_file, video_path)
+
+
 def combine_videos(
     combined_video_path: str,
     video_paths: List[str],
@@ -971,6 +1141,8 @@ def combine_videos(
     source_groups: dict[str, str] | None = None,
     used_video_paths: List[str] | None = None,
     progress_callback: Callable[[float], None] | None = None,
+    target_duration: float | None = None,
+    cut_times: list[float] | None = None,
 ) -> str:
     # Pydantic leaves this optional default as the string "random" unless
     # explicitly provided. Normalize it once for all downstream enum access.
@@ -984,10 +1156,19 @@ def combine_videos(
         close_clip(audio_clip)
     logger.info(f"audio duration: {audio_duration} seconds")
     logger.info(f"maximum clip duration: {max_clip_duration} seconds")
-    required_video_duration = _get_required_video_duration(audio_duration)
+    required_video_duration = (
+        float(target_duration) if target_duration is not None
+        else _get_required_video_duration(audio_duration)
+    )
+    if not math.isfinite(required_video_duration) or required_video_duration <= 0:
+        raise ValueError("invalid target video duration")
+    duration_basis = (
+        "explicit target" if target_duration is not None
+        else f"audio duration + {_VIDEO_DURATION_SAFETY_MARGIN:.2f}s safety margin"
+    )
     logger.info(
         f"required video duration: {required_video_duration:.2f} seconds "
-        f"(audio duration + {_VIDEO_DURATION_SAFETY_MARGIN:.2f}s safety margin)"
+        f"({duration_basis})"
     )
 
     # 兼容 API 直接调用时未传转场模式的情况，避免后续访问 .value 时崩溃。
@@ -1066,6 +1247,9 @@ def combine_videos(
            if source_usage is not None else {}),
     )
 
+    if cut_times is not None:
+        subclipped_items = _plan_timed_clips(subclipped_items, cut_times, normalized_clip_speed)
+
     logger.debug(f"total subclipped items: {len(subclipped_items)}")
 
     # Add downloaded clips over and over until the duration of the audio (max_duration) has been reached
@@ -1134,7 +1318,13 @@ def combine_videos(
                 shuffle_transition = random.choice(transition_funcs)
                 clip = shuffle_transition(clip)
 
-            if clip.duration > max_clip_duration:
+            if cut_times is not None:
+                target_hold = subclipped_item.duration
+                if clip.duration < target_hold:
+                    clip = clip.with_effects([vfx.Loop(duration=target_hold)])
+                else:
+                    clip = clip.subclipped(0, target_hold)
+            elif clip.duration > max_clip_duration:
                 clip = clip.subclipped(0, max_clip_duration)
 
             # Write each candidate clip to a unique temporary file. Threads must not
@@ -1198,9 +1388,10 @@ def combine_videos(
             while candidate_index < len(subclipped_items) and batch_duration < remaining_duration:
                 subclipped_item = subclipped_items[candidate_index]
                 source_duration = subclipped_item.end_time - subclipped_item.start_time
-                output_duration = min(
-                    max_clip_duration,
-                    source_duration / normalized_clip_speed,
+                output_duration = (
+                    subclipped_item.duration if cut_times is not None else min(
+                        max_clip_duration, source_duration / normalized_clip_speed
+                    )
                 )
                 batch.append((candidate_index, subclipped_item))
                 batch_duration += output_duration
@@ -1745,8 +1936,9 @@ def generate_video(
         )
         voice_source_clip = clip_stack.enter_context(AudioFileClip(audio_path))
         video_clip = source_video_clip
+        audio_volume = params.bgm_volume if is_beat_length_mode(params) else params.voice_volume
         audio_clip = voice_source_clip.with_effects(
-            [afx.MultiplyVolume(params.voice_volume)]
+            [afx.MultiplyVolume(audio_volume)]
         )
 
         def make_textclip(text):

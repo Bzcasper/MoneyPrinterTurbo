@@ -608,6 +608,19 @@
     "MuAPI Billing Notice Without Script": "Each generated clip is billed by MuAPI. Enter or generate the video script to see an estimated task count.",
     "Confirm MuAPI Charge": "I understand MuAPI video generation creates paid tasks",
     "Confirm MuAPI Charge Help": "MuAPI clips are submitted one at a time and stop once they cover the voiceover duration. An ambiguous submission is not retried because it may already have created a billable remote task.",
-    "Confirm MuAPI Charge Required": "Please confirm the MuAPI charge before generating the video."
+    "Confirm MuAPI Charge Required": "Please confirm the MuAPI charge before generating the video.",
+    "Type Beat Settings": "Type Beat Settings",
+    "Beat-Length Mode": "Use Full Beat Length",
+    "Beat-Length Mode Help": "Use the uploaded custom beat as the main audio and video duration.",
+    "Beat-Synced Cuts": "Beat-Synced Cuts",
+    "Noir Visual Effects": "Noir Effects: Flicker, Grain, Vignette",
+    "Show Beat Cards": "Show BPM, Key and Lease Cards",
+    "Beat Title": "Beat Title",
+    "Beat BPM": "Beat BPM",
+    "Beat BPM Help": "Zero detects BPM automatically when beat-synced cuts are enabled.",
+    "Beat Key": "Beat Key",
+    "Beat Genre": "Beat Genre",
+    "Beat Lease URL": "Beat Lease URL",
+    "Beat Publishing Metadata": "Beat Title, Description and Tags"
   }
 }

@@ -449,6 +449,19 @@
     "OFox Upstream Vendor Help": "Tria qui genera els vídeos a través d'OFox. BytePlus (internacional) és l'opció per defecte i aplica una política de contingut uniforme. Volcano Engine és el proveïdor de la Xina continental. L'opció automàtica reparteix les peticions entre proveïdors.",
     "OFox Vendor BytePlus": "BytePlus (internacional, per defecte)",
     "OFox Vendor Volcengine": "Volcano Engine (Xina continental)",
-    "OFox Vendor Auto": "Automàtic (repartiment de peticions)"
+    "OFox Vendor Auto": "Automàtic (repartiment de peticions)",
+    "Type Beat Settings": "Configuració del Type Beat",
+    "Beat-Length Mode": "Utilitza tota la durada del beat",
+    "Beat-Length Mode Help": "Utilitza el beat personalitzat carregat com a àudio principal i durada del vídeo.",
+    "Beat-Synced Cuts": "Talls sincronitzats amb el beat",
+    "Noir Visual Effects": "Efectes noir: parpelleig, gra i vinyeta",
+    "Show Beat Cards": "Mostra targetes de BPM, tonalitat i llicència",
+    "Beat Title": "Títol del beat",
+    "Beat BPM": "BPM del beat",
+    "Beat BPM Help": "El zero detecta els BPM automàticament quan els talls sincronitzats estan activats.",
+    "Beat Key": "Tonalitat del beat",
+    "Beat Genre": "Gènere del beat",
+    "Beat Lease URL": "URL de llicència del beat",
+    "Beat Publishing Metadata": "Títol, descripció i etiquetes del beat"
   }
 }

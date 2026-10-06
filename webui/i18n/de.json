@@ -449,6 +449,19 @@
     "OFox Upstream Vendor Help": "Welcher Upstream-Anbieter die OFox-Videogenerierung bedient. BytePlus (international) ist der Standard mit einheitlicher Inhaltsrichtlinie; Volcano Engine ist der Festland-China-Anbieter; Auto lässt das OFox-Gateway die Last über die Anbieter verteilen.",
     "OFox Vendor BytePlus": "BytePlus (international, Standard)",
     "OFox Vendor Volcengine": "Volcano Engine (Festlandchina)",
-    "OFox Vendor Auto": "Auto (Gateway-Lastverteilung)"
+    "OFox Vendor Auto": "Auto (Gateway-Lastverteilung)",
+    "Type Beat Settings": "Type-Beat-Einstellungen",
+    "Beat-Length Mode": "Volle Beat-Länge verwenden",
+    "Beat-Length Mode Help": "Den hochgeladenen eigenen Beat als Hauptaudio und Videodauer verwenden.",
+    "Beat-Synced Cuts": "Beatsynchrone Schnitte",
+    "Noir Visual Effects": "Noir-Effekte: Flimmern, Filmkorn, Vignette",
+    "Show Beat Cards": "BPM-, Tonart- und Lizenzkarten anzeigen",
+    "Beat Title": "Beat-Titel",
+    "Beat BPM": "Beat-BPM",
+    "Beat BPM Help": "Null erkennt die BPM automatisch, wenn beatsynchrone Schnitte aktiviert sind.",
+    "Beat Key": "Beat-Tonart",
+    "Beat Genre": "Beat-Genre",
+    "Beat Lease URL": "Beat-Lizenz-URL",
+    "Beat Publishing Metadata": "Beat-Titel, Beschreibung und Tags"
   }
 }

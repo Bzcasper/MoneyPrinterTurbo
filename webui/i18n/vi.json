@@ -449,6 +449,19 @@
     "OFox Upstream Vendor Help": "Nhà cung cấp thượng nguồn phục vụ việc tạo video OFox. BytePlus (quốc tế) là mặc định với chính sách nội dung nhất quán; Volcano Engine là nhà cung cấp Trung Quốc đại lục; Tự động để gateway OFox cân bằng tải giữa các nhà cung cấp.",
     "OFox Vendor BytePlus": "BytePlus (quốc tế, mặc định)",
     "OFox Vendor Volcengine": "Volcano Engine (Trung Quốc đại lục)",
-    "OFox Vendor Auto": "Tự động (gateway cân bằng tải)"
+    "OFox Vendor Auto": "Tự động (gateway cân bằng tải)",
+    "Type Beat Settings": "Cài đặt Type Beat",
+    "Beat-Length Mode": "Dùng toàn bộ thời lượng beat",
+    "Beat-Length Mode Help": "Dùng beat tùy chỉnh đã tải lên làm âm thanh chính và thời lượng video.",
+    "Beat-Synced Cuts": "Cắt đồng bộ theo beat",
+    "Noir Visual Effects": "Hiệu ứng noir: nhấp nháy, hạt phim, tối viền",
+    "Show Beat Cards": "Hiện thẻ BPM, giọng và giấy phép",
+    "Beat Title": "Tiêu đề beat",
+    "Beat BPM": "BPM của beat",
+    "Beat BPM Help": "Số không tự phát hiện BPM khi bật cắt đồng bộ theo beat.",
+    "Beat Key": "Giọng của beat",
+    "Beat Genre": "Thể loại beat",
+    "Beat Lease URL": "URL cấp phép beat",
+    "Beat Publishing Metadata": "Tiêu đề, mô tả và thẻ beat"
   }
 }
