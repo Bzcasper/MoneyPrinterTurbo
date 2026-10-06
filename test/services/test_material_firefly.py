@@ -515,5 +515,52 @@ class TestFireflyImageProvider(unittest.TestCase):
                 self.assertEqual(self._run_firefly_test_terms(["one"], duration), [])
             gen.assert_not_called()
 
+
+    def test_firefly_full_scene_is_sent_unchanged_and_keywords_use_template(self):
+        scene = "Hands fitting a wooden shelf, soft window light, no text"
+        config.app["firefly_prompt_template"] = "workshop photograph of {term}"
+        for is_scene, expected in ((True, scene), (False, f"workshop photograph of {scene}")):
+            with (
+                self.subTest(is_scene=is_scene),
+                patch("app.services.material.requests.post", return_value=_webhook_response({"success": True, "image_url": "https://image.test/result"})) as post,
+                patch("app.services.material.requests.get", return_value=_download_response(_png_bytes())),
+            ):
+                images = material.generate_images_firefly(scene, 5, save_dir=self.save_dir, scene_prompt=is_scene)
+            self.assertEqual(len(images), 1)
+            self.assertEqual(post.call_args.kwargs["json"]["prompt"], expected)
+
+    def test_firefly_scene_bypass_reaches_serial_and_parallel_workers(self):
+        for concurrency in (1, 2):
+            for is_scene in (False, True):
+                config.app["firefly_concurrency"] = concurrency
+                with (
+                    self.subTest(concurrency=concurrency, is_scene=is_scene),
+                    patch("app.services.material.generate_images_firefly", side_effect=lambda search_term, **kwargs: [self._firefly_test_item(search_term)]) as generate,
+                    patch("app.services.material._render_openai_image_video", side_effect=lambda file, duration: file.replace(".png", ".mp4")),
+                    patch("app.services.material._persist_material_sources"),
+                ):
+                    paths = material._download_videos_firefly_on_demand(
+                        task_id="scene-forwarding", search_terms=["one", "two", "unused"],
+                        video_aspect=material.VideoAspect.portrait, audio_duration=10,
+                        max_clip_duration=5, material_directory=self.save_dir, scene_prompts=is_scene,
+                    )
+                self.assertEqual([os.path.basename(file) for file in paths], ["one.mp4", "two.mp4"])
+                self.assertEqual(generate.call_count, 2)
+                for call in generate.call_args_list:
+                    if is_scene:
+                        self.assertTrue(call.kwargs["scene_prompt"])
+                    else:
+                        self.assertNotIn("scene_prompt", call.kwargs)
+
+    def test_firefly_scene_mode_is_forwarded_from_public_material_entry(self):
+        config.app["material_directory"] = self.save_dir
+        for is_scene in (False, True):
+            with self.subTest(is_scene=is_scene), patch("app.services.material._download_videos_firefly_on_demand", return_value=["clip.mp4"]) as download:
+                self.assertEqual(material.download_videos("scene-test", ["scene"], source="firefly", audio_duration=5, firefly_scene_prompts=is_scene), ["clip.mp4"])
+            if is_scene:
+                self.assertTrue(download.call_args.kwargs["scene_prompts"])
+            else:
+                self.assertNotIn("scene_prompts", download.call_args.kwargs)
+
 if __name__ == "__main__":
     unittest.main()

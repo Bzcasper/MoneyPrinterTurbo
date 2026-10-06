@@ -8,7 +8,8 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from app.config import config
-from app.services import verticals, voice
+from app.services import llm, verticals, voice
+from app.models.schema import VideoParams
 
 ROOT_DIR = Path(__file__).parent.parent.parent
 WEBUI_MAIN = ROOT_DIR / "webui" / "Main.py"
@@ -154,3 +155,49 @@ def test_firefly_concurrency_setting_persists():
         field.set_value(4).run()
         assert config.app["firefly_concurrency"] == 4
         assert [str(item.value) for item in app.exception] == []
+
+
+def test_firefly_vertical_button_generates_scenes_and_keeps_commas():
+    scenes = [f"Workshop scene {index}, hands crafting, natural light" for index in range(5)]
+    with _running_app(_GroupedSelectHarness()) as app:
+        _select_vertical(app, "diy")
+        app.session_state["video_subject"] = "Build a shelf"
+        app.session_state["video_script"] = "Cut the wood. Assemble the shelf."
+        app.run()
+        with patch.object(llm, "generate_terms", return_value=scenes) as generate:
+            button = next(item for item in app.button if item.key == "auto_generate_terms")
+            assert button.label == "Generate Firefly Scene Prompts"
+            button.click().run()
+        assert [str(item.value) for item in app.exception] == []
+        assert generate.call_args.kwargs["terms_prompt"] == verticals.DIY_TERMS_PROMPT
+        assert generate.call_args.kwargs["match_script_order"] is True
+        assert app.session_state["firefly_scene_prompts_input"] is True
+        editor = next(item for item in app.text_area if item.key == "video_terms")
+        assert editor.label == "Firefly Scene Prompts"
+        assert editor.value == "\n".join(scenes)
+
+
+def test_firefly_keyword_vertical_keeps_template_editor_and_default_llm_call():
+    with _running_app(_GroupedSelectHarness()) as app:
+        _select_vertical(app, "jewelry")
+        app.session_state["video_subject"] = "Gold ring"
+        app.session_state["video_script"] = "A beautifully crafted ring."
+        app.run()
+        with patch.object(llm, "generate_terms", return_value=["gold", "diamond"]) as generate:
+            next(item for item in app.button if item.key == "auto_generate_terms").click().run()
+        assert "terms_prompt" not in generate.call_args.kwargs
+        assert app.session_state["firefly_scene_prompts_input"] is False
+        assert app.session_state["video_terms"] == "gold, diamond"
+        assert [str(item.value) for item in app.exception] == []
+
+
+def test_restoring_firefly_scenes_preserves_vertical_and_line_based_terms():
+    scenes = ["Hands fitting wood, macro view", "Finished shelf in use, natural light"]
+    params = VideoParams(video_subject="Shelf", video_source="firefly", content_vertical="diy", firefly_scene_prompts=True, video_terms=scenes, video_aspect="16:9", video_concat_mode="sequential")
+    with _running_app(_GroupedSelectHarness()) as app:
+        app.session_state["task_restore_payload"] = {"task_id": "scene-restore", "params": params.model_dump(mode="json")}
+        app.run()
+        assert [str(item.value) for item in app.exception] == []
+        assert app.session_state["content_vertical_select_en"] == "diy"
+        assert app.session_state["firefly_scene_prompts_input"] is True
+        assert app.session_state["video_terms"] == "\n".join(scenes)
