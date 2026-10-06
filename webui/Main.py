@@ -1607,8 +1607,7 @@ def _apply_restored_params(params):
         "subtitle_position_select", params.get("subtitle_position") or "bottom"
     )
     _set_stable_widget_value(
-        "subtitle_display_mode_select",
-        params.get("subtitle_display_mode") or "sentence",
+        "subtitle_display_mode_select", params.get("subtitle_display_mode") or "sentence"
     )
     _set_stable_widget_value(
         "subtitle_animation_select", params.get("subtitle_animation") or "none"
@@ -1829,9 +1828,7 @@ def _render_top_bar():
                     # 新语言页面把已经输入的主题、文案和关键词重置为空。
                     for content_key in ("video_subject", "video_script", "video_terms"):
                         if content_key in st.session_state:
-                            st.session_state[content_key] = st.session_state[
-                                content_key
-                            ]
+                            st.session_state[content_key] = st.session_state[content_key]
                     # 切换语言后强制刷新，避免 selectbox 继续展示旧语言文案。
                     st.rerun()
 
@@ -2035,18 +2032,13 @@ def _render_generation_task_snapshot(task_id, task):
 
     st.success(tr("Video Generation Completed"))
     for warning in task.get("warnings") or []:
-        if (
-            isinstance(warning, Mapping)
-            and warning.get("code") == "batch_materials_reused"
-        ):
+        if isinstance(warning, Mapping) and warning.get("code") == "batch_materials_reused":
             st.warning(
                 tr("Batch Material Reuse Warning").format(
                     index=warning.get("video_index", ""), count=warning.get("count", 0)
                 )
             )
-        elif (
-            isinstance(warning, Mapping) and warning.get("code") == "sonilo_bgm_failed"
-        ):
+        elif isinstance(warning, Mapping) and warning.get("code") == "sonilo_bgm_failed":
             st.warning(
                 tr("Sonilo BGM Fallback Warning").format(
                     index=warning.get("video_index", "")
@@ -2065,13 +2057,16 @@ def _render_generation_task_snapshot(task_id, task):
             st.warning(str(warning))
 
     available_videos = [
-        (index, url) for index, url in enumerate(video_files) if os.path.isfile(url)
+        (index, url)
+        for index, url in enumerate(video_files)
+        if os.path.isfile(url)
     ]
     for index, url in enumerate(video_files):
         if os.path.isfile(url):
             continue
         logger.warning(
-            f"generated video is unavailable: task_id={task_id}, video_file={url}"
+            f"generated video is unavailable: "
+            f"task_id={task_id}, video_file={url}"
         )
 
     try:
@@ -2230,10 +2225,8 @@ def format_llm_connection_error(provider_id, base_url, error):
         "unauthorized",
     )
     provider = get_llm_provider(provider_id)
-    if (
-        provider is None
-        or not provider.service_endpoints
-        or not any(marker in normalized_error for marker in authentication_markers)
+    if provider is None or not provider.service_endpoints or not any(
+        marker in normalized_error for marker in authentication_markers
     ):
         return error_text
 
@@ -3219,11 +3212,7 @@ def _render_settings_dialog():
         )
 
         with publish_config_panel:
-            st.write(
-                tr(
-                    "Automatically publish generated videos to social media using upload-post.com"
-                )
-            )
+            st.write(tr("Automatically publish generated videos to social media using upload-post.com"))
             st.info(
                 tr("Upload-Post Setup Guide").format(
                     api_keys_url=UPLOAD_POST_API_KEYS_URL,
@@ -3240,7 +3229,7 @@ def _render_settings_dialog():
             upload_post_enabled = st.checkbox(
                 tr("Enable Upload-Post Integration"),
                 value=is_enabled,
-                key="upload_post_enabled_checkbox",
+                key="upload_post_enabled_checkbox"
             )
             if upload_post_enabled != is_enabled:
                 _set_runtime_config("app", "upload_post_enabled", upload_post_enabled)
@@ -3248,12 +3237,10 @@ def _render_settings_dialog():
             upload_post_auto_upload = st.checkbox(
                 tr("Enable Auto-Publish"),
                 value=is_auto,
-                key="upload_post_auto_upload_checkbox",
+                key="upload_post_auto_upload_checkbox"
             )
             if upload_post_auto_upload != is_auto:
-                _set_runtime_config(
-                    "app", "upload_post_auto_upload", upload_post_auto_upload
-                )
+                _set_runtime_config("app", "upload_post_auto_upload", upload_post_auto_upload)
 
             upload_post_api_key = st.text_input(
                 tr("Upload-Post API Key"),
@@ -3262,7 +3249,7 @@ def _render_settings_dialog():
                 help=tr("Upload-Post API Key Help").format(
                     api_keys_url=UPLOAD_POST_API_KEYS_URL
                 ),
-                key="upload_post_api_key_input",
+                key="upload_post_api_key_input"
             )
             if upload_post_api_key != config.app.get("upload_post_api_key", ""):
                 _set_runtime_config("app", "upload_post_api_key", upload_post_api_key)
@@ -3273,7 +3260,7 @@ def _render_settings_dialog():
                 help=tr("Upload-Post Profile Username Help").format(
                     manage_users_url=UPLOAD_POST_MANAGE_USERS_URL
                 ),
-                key="upload_post_username_input",
+                key="upload_post_username_input"
             )
             if upload_post_username != config.app.get("upload_post_username", ""):
                 _set_runtime_config("app", "upload_post_username", upload_post_username)
@@ -3281,65 +3268,42 @@ def _render_settings_dialog():
             upload_post_platforms = st.multiselect(
                 tr("Platforms"),
                 options=["tiktok", "instagram", "youtube"],
-                default=config.app.get(
-                    "upload_post_platforms", ["tiktok", "instagram"]
-                ),
+                default=config.app.get("upload_post_platforms", ["tiktok", "instagram"]),
                 help="Select platforms to publish to",
-                key="upload_post_platforms_multiselect",
+                key="upload_post_platforms_multiselect"
             )
-            if upload_post_platforms != config.app.get(
-                "upload_post_platforms", ["tiktok", "instagram"]
-            ):
-                _set_runtime_config(
-                    "app", "upload_post_platforms", upload_post_platforms
-                )
+            if upload_post_platforms != config.app.get("upload_post_platforms", ["tiktok", "instagram"]):
+                _set_runtime_config("app", "upload_post_platforms", upload_post_platforms)
 
             if "youtube" in upload_post_platforms:
                 yt_status_options = ["public", "private", "unlisted"]
-                yt_saved = config.app.get(
-                    "upload_post_youtube_privacy_status", "public"
-                )
+                yt_saved = config.app.get("upload_post_youtube_privacy_status", "public")
                 if yt_saved not in yt_status_options:
                     yt_saved = "public"
                 upload_post_youtube_privacy_status = st.selectbox(
                     tr("YouTube Privacy Status"),
                     options=yt_status_options,
                     index=yt_status_options.index(yt_saved),
-                    key="upload_post_youtube_privacy_status_selectbox",
+                    key="upload_post_youtube_privacy_status_selectbox"
                 )
-                if upload_post_youtube_privacy_status != config.app.get(
-                    "upload_post_youtube_privacy_status", "public"
-                ):
-                    _set_runtime_config(
-                        "app",
-                        "upload_post_youtube_privacy_status",
-                        upload_post_youtube_privacy_status,
-                    )
+                if upload_post_youtube_privacy_status != config.app.get("upload_post_youtube_privacy_status", "public"):
+                    _set_runtime_config("app", "upload_post_youtube_privacy_status", upload_post_youtube_privacy_status)
 
                 # 受众声明只影响 YouTube 发布，不改变生成内容或其它平台的请求。
                 # 使用真正的布尔选项，避免把展示文字或字符串当成 API 参数。
-                saved_audience = config.app.get(
-                    "upload_post_youtube_made_for_kids", False
-                )
-                audience_labels = {
-                    False: tr("Not Made for Kids"),
-                    True: tr("Made for Kids"),
-                }
+                saved_audience = config.app.get("upload_post_youtube_made_for_kids", False)
+                audience_labels = {False: tr("Not Made for Kids"), True: tr("Made for Kids")}
                 made_for_kids = st.selectbox(
                     tr("YouTube Audience"),
                     options=[False, True],
                     # 非法配置保持未选择，不在打开设置时擅自改成非儿童声明。
-                    index=int(saved_audience)
-                    if isinstance(saved_audience, bool)
-                    else None,
+                    index=int(saved_audience) if isinstance(saved_audience, bool) else None,
                     format_func=audience_labels.get,
                     help=tr("YouTube Audience Help"),
                     key="upload_post_youtube_made_for_kids_selectbox",
                 )
                 if isinstance(made_for_kids, bool):
-                    _set_runtime_config(
-                        "app", "upload_post_youtube_made_for_kids", made_for_kids
-                    )
+                    _set_runtime_config("app", "upload_post_youtube_made_for_kids", made_for_kids)
 
         # 左侧面板 - 日志设置
         with left_config_panel:
@@ -3411,12 +3375,14 @@ def _render_settings_dialog():
                 # 选择服务区域，再由 Registry 同步 API 申请入口和 Base URL，
                 # 避免手工组合错误。已有空 Base URL 配置继续沿用中国站，只有
                 # 尚未填写 Key 的全新配置才根据界面语言推荐对应入口。
-                selected_service_endpoint = llm_provider_spec.select_service_endpoint(
-                    configured_llm_base_url,
-                    has_api_key=bool(str(llm_api_key).strip()),
-                    prefer_international=(
-                        st.session_state.get("ui_language", "en") != "zh"
-                    ),
+                selected_service_endpoint = (
+                    llm_provider_spec.select_service_endpoint(
+                        configured_llm_base_url,
+                        has_api_key=bool(str(llm_api_key).strip()),
+                        prefer_international=(
+                            st.session_state.get("ui_language", "en") != "zh"
+                        ),
+                    )
                 )
                 endpoint_options = [
                     endpoint.endpoint_id
@@ -3731,7 +3697,8 @@ def _render_settings_dialog():
                     key=lambda value: value != metaso_minimax.DEFAULT_RESOLUTION,
                 )
                 resolution_is_valid = (
-                    configured_metaso_resolution in metaso_minimax.SUPPORTED_RESOLUTIONS
+                    configured_metaso_resolution
+                    in metaso_minimax.SUPPORTED_RESOLUTIONS
                 )
                 if not resolution_is_valid:
                     # 分辨率直接影响计费。手工配置错误时保留原值并要求用户
@@ -3761,9 +3728,7 @@ def _render_settings_dialog():
 
                 st.divider()
                 st.markdown("**OfoxAI**")
-                st.caption(
-                    f"[OfoxAI]({OFOX_REFERRAL_URL}) · {tr('OFox AI Video Help')}"
-                )
+                st.caption(f"[OfoxAI]({OFOX_REFERRAL_URL}) · {tr('OFox AI Video Help')}")
                 ofox_api_key = st.text_input(
                     tr("OFox API Key"),
                     value=str(config.app.get("ofox_api_key", "") or ""),
@@ -3810,7 +3775,8 @@ def _render_settings_dialog():
                     (tr("OFox Vendor Auto"), ""),
                 ]
                 configured_ofox_vendor = str(
-                    config.app.get("ofox_provider", ofox.DEFAULT_PROVIDER_TYPE) or ""
+                    config.app.get("ofox_provider", ofox.DEFAULT_PROVIDER_TYPE)
+                    or ""
                 ).strip()
                 if configured_ofox_vendor not in {
                     value for _, value in ofox_vendor_options
@@ -3854,7 +3820,9 @@ def _render_settings_dialog():
                         help=tr("Shengsuan Cloud API Key Help"),
                         placeholder=tr("Shengsuan Cloud API Key Placeholder"),
                     ).strip()
-                    _set_runtime_config("app", "loomloom_api_token", loomloom_api_token)
+                    _set_runtime_config(
+                        "app", "loomloom_api_token", loomloom_api_token
+                    )
 
                 st.divider()
                 seedance_api_key_value = str(
@@ -4019,6 +3987,7 @@ def _render_settings_dialog():
                     muapi_resolution.strip() or muapi.DEFAULT_RESOLUTION,
                 )
 
+
             with st.container(border=True):
                 st.markdown(f"#### {tr('AI Image Generation APIs')}")
                 st.caption(tr("AI Image Generation APIs Help"))
@@ -4034,7 +4003,9 @@ def _render_settings_dialog():
                     "app", "openai_image_base_url", openai_image_base_url.strip()
                 )
 
-                openai_image_api_key = _get_material_api_keys("openai_image_api_keys")
+                openai_image_api_key = _get_material_api_keys(
+                    "openai_image_api_keys"
+                )
                 openai_image_api_key = st.text_input(
                     tr("OpenAI Image API Key"),
                     value=openai_image_api_key,
@@ -4042,7 +4013,9 @@ def _render_settings_dialog():
                     help=tr("OpenAI Image API Key Help"),
                     key="openai_image_api_keys_input",
                 )
-                _save_material_api_keys("openai_image_api_keys", openai_image_api_key)
+                _save_material_api_keys(
+                    "openai_image_api_keys", openai_image_api_key
+                )
 
                 openai_image_model = st.text_input(
                     tr("OpenAI Image Model"),
@@ -4058,7 +4031,9 @@ def _render_settings_dialog():
                 # 用户在未知情时误连官方付费接口，也不会覆盖旧配置。
                 st.caption(tr("OpenAI Image Configuration Example"))
 
-                with st.expander(tr("OpenAI Image Advanced Settings"), expanded=False):
+                with st.expander(
+                    tr("OpenAI Image Advanced Settings"), expanded=False
+                ):
                     openai_image_size = st.text_input(
                         tr("OpenAI Image Size"),
                         value=str(config.app.get("openai_image_size", "") or ""),
@@ -4164,6 +4139,8 @@ def _effective_script_generation_backend():
     return backend if backend in {"local", "loomloom"} else "local"
 
 
+
+
 def _script_generation_method_help(selected_backend):
     """让“文案生成方式”的问号内容严格跟随当前选择。"""
     if selected_backend != "loomloom":
@@ -4222,11 +4199,7 @@ def _loomloom_video_signature(batch, credential_fingerprint):
 def _loomloom_video_account_signature(token):
     """服务地址和凭据共同隔离模型目录及报价，不能跨端点复用已确认状态。"""
     values = config.snapshot_config_with_pending(config.app)
-    base_url = (
-        str(values.get("loomloom_base_url") or loomloom.DEFAULT_BASE_URL)
-        .strip()
-        .rstrip("/")
-    )
+    base_url = str(values.get("loomloom_base_url") or loomloom.DEFAULT_BASE_URL).strip().rstrip("/")
     payload = json.dumps([base_url, str(token or "").strip()])
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -4286,11 +4259,7 @@ def _loomloom_video_model_price(model):
 def _format_loomloom_video_model_option(model):
     """在模型名右侧展示短价格，避免多档分辨率价格把下拉框撑得过宽。"""
     compact_price, _ = _loomloom_video_model_price(model)
-    return (
-        f"{model.display_name} · {compact_price}"
-        if compact_price
-        else model.display_name
-    )
+    return f"{model.display_name} · {compact_price}" if compact_price else model.display_name
 
 
 def _effective_voice_rate_before_audio_panel():
@@ -4540,8 +4509,12 @@ def _render_loomloom_video_settings(params):
     _set_runtime_config("ui", "loomloom_video_scene_count", int(scene_count))
     if coverage_plan is not None:
         coverage_seconds = int(scene_count) * coverage_plan["clip_duration"]
-        shortfall_min = max(coverage_plan["duration_min"] - coverage_seconds, 0.0)
-        shortfall_max = max(coverage_plan["duration_max"] - coverage_seconds, 0.0)
+        shortfall_min = max(
+            coverage_plan["duration_min"] - coverage_seconds, 0.0
+        )
+        shortfall_max = max(
+            coverage_plan["duration_max"] - coverage_seconds, 0.0
+        )
         duration_basis = tr(coverage_plan["basis_key"]).format(
             duration=_format_numeric_range(
                 coverage_plan["duration_min"], coverage_plan["duration_max"]
@@ -4589,9 +4562,7 @@ def _render_loomloom_video_settings(params):
         except (loomloom.LoomLoomError, ValueError) as exc:
             logger.warning(f"failed to quote LoomLoom videos: error={exc}")
             st.session_state["loomloom_video_quote_error_signature"] = input_signature
-            st.session_state["loomloom_video_quote_error"] = (
-                str(exc) or type(exc).__name__
-            )
+            st.session_state["loomloom_video_quote_error"] = str(exc) or type(exc).__name__
         else:
             st.session_state["loomloom_video_batch"] = batch
             st.session_state["loomloom_video_quote"] = quote_result
@@ -4718,9 +4689,9 @@ def _render_local_script_generation(params):
         else:
             st.session_state["video_script"] = script
             st.session_state["video_terms"] = ", ".join(terms)
-            st.session_state["loomloom_video_scene_autofill_digest"] = hashlib.sha256(
-                script.strip().encode("utf-8")
-            ).hexdigest()
+            st.session_state["loomloom_video_scene_autofill_digest"] = (
+                hashlib.sha256(script.strip().encode("utf-8")).hexdigest()
+            )
 
 
 def _render_loomloom_candidates():
@@ -4758,9 +4729,9 @@ def _render_loomloom_candidates():
         st.session_state["video_script"] = selected.script
         st.session_state["video_terms"] = ", ".join(selected.video_terms)
         # 与普通大模型生成文案保持一致：应用新候选后仅推荐一次素材数量。
-        st.session_state["loomloom_video_scene_autofill_digest"] = hashlib.sha256(
-            selected.script.strip().encode("utf-8")
-        ).hexdigest()
+        st.session_state["loomloom_video_scene_autofill_digest"] = (
+            hashlib.sha256(selected.script.strip().encode("utf-8")).hexdigest()
+        )
         st.toast(tr("LoomLoom Candidate Applied"))
 
 
@@ -4866,7 +4837,9 @@ def _render_loomloom_script_generation(params):
         key="loomloom_script_duration_seconds",
     )
     _set_runtime_config("ui", "loomloom_candidate_count", int(candidate_count))
-    _set_runtime_config("ui", "loomloom_script_duration_seconds", int(duration_seconds))
+    _set_runtime_config(
+        "ui", "loomloom_script_duration_seconds", int(duration_seconds)
+    )
     input_signature = _loomloom_script_signature(
         subject=params.video_subject,
         language=params.video_language,
@@ -5327,9 +5300,7 @@ def _render_video_settings(panel, params):
             if params.video_source == "volcengine_seedance":
                 st.caption(tr("Volcano Engine Seedance Help"))
             if params.video_source == "ofox":
-                st.caption(
-                    f"[OfoxAI]({OFOX_REFERRAL_URL}) · {tr('OFox AI Video Help')}"
-                )
+                st.caption(f"[OfoxAI]({OFOX_REFERRAL_URL}) · {tr('OFox AI Video Help')}")
             if params.video_source == "metaso_minimax":
                 st.caption(tr("Metaso MiniMax H3 Help"))
             if params.video_source == "muapi":
@@ -5473,7 +5444,9 @@ def _render_video_settings(panel, params):
                 help=tr("Video Fit Mode Help"),
             )
             params.video_fit_mode = VideoFitMode(selected_fit_mode)
-            _set_runtime_config("ui", "video_fit_mode", params.video_fit_mode.value)
+            _set_runtime_config(
+                "ui", "video_fit_mode", params.video_fit_mode.value
+            )
 
             # MiniMax H3 的远端时长范围是 4～15 秒。选择秘塔时使用完整能力
             # 范围，既避免 2/3 秒被按 4 秒计费，也让 WebUI 与 CLI、服务层一致。
@@ -5499,12 +5472,16 @@ def _render_video_settings(panel, params):
                 default_value=_saved_ui_choice(
                     "video_clip_duration",
                     video_clip_durations,
-                    5 if params.video_source in {"metaso_minimax", "muapi"} else 3,
+                    5
+                    if params.video_source in {"metaso_minimax", "muapi"}
+                    else 3,
                 ),
                 key="video_clip_duration_select",
                 help=tr("Clip Duration Help"),
             )
-            _set_runtime_config("ui", "video_clip_duration", params.video_clip_duration)
+            _set_runtime_config(
+                "ui", "video_clip_duration", params.video_clip_duration
+            )
             clip_speed_key = localized_widget_key("video_clip_speed_slider")
             # session_state 可能来自旧任务、API 参数或旧版页面状态。控件创建前
             # 统一归一化，既保留合法选择，也确保 slider 始终收到 0.5～2.0
@@ -5529,7 +5506,9 @@ def _render_video_settings(panel, params):
             params.video_count = stable_selectbox(
                 tr("Number of Videos Generated Simultaneously"),
                 options=video_count_options,
-                default_value=_saved_ui_choice("video_count", video_count_options, 1),
+                default_value=_saved_ui_choice(
+                    "video_count", video_count_options, 1
+                ),
                 key="video_count_select",
             )
             _set_runtime_config("ui", "video_count", params.video_count)
@@ -5631,7 +5610,9 @@ def _render_wavespeed_video_settings(params):
         max_clips = max(
             math.ceil(estimated_range[1] * video_count / clip_duration), min_clips
         )
-        st.warning(tr("WaveSpeed Billing Notice").format(min=min_clips, max=max_clips))
+        st.warning(
+            tr("WaveSpeed Billing Notice").format(min=min_clips, max=max_clips)
+        )
     else:
         st.warning(tr("WaveSpeed Billing Notice Without Script"))
     st.checkbox(
@@ -5679,7 +5660,9 @@ def _render_ofox_video_settings(params):
         max_clips = max(
             math.ceil(estimated_range[1] * video_count / clip_duration), min_clips
         )
-        st.warning(tr("OFox Billing Notice").format(min=min_clips, max=max_clips))
+        st.warning(
+            tr("OFox Billing Notice").format(min=min_clips, max=max_clips)
+        )
     else:
         st.warning(tr("OFox Billing Notice Without Script"))
     st.checkbox(
@@ -5754,7 +5737,9 @@ def _render_muapi_video_settings(params):
         max_clips = max(
             math.ceil(estimated_range[1] * video_count / clip_duration), min_clips
         )
-        st.warning(tr("MuAPI Billing Notice").format(min=min_clips, max=max_clips))
+        st.warning(
+            tr("MuAPI Billing Notice").format(min=min_clips, max=max_clips)
+        )
     else:
         st.warning(tr("MuAPI Billing Notice Without Script"))
     st.checkbox(
@@ -6017,10 +6002,9 @@ def _sync_voxcpm_reference_audio(uploaded_file) -> bytes | None:
         "audio_digest": hashlib.sha256(wav_audio).hexdigest(),
         "audio_bytes": wav_audio,
     }
-    if previous_digest != hashlib.sha256(
-        wav_audio
-    ).hexdigest() and not st.session_state.get(
-        VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY, False
+    if (
+        previous_digest != hashlib.sha256(wav_audio).hexdigest()
+        and not st.session_state.get(VOXCPM_SEPARATE_PROMPT_AUDIO_SESSION_KEY, False)
     ):
         _clear_voxcpm_prompt_transcript()
     st.session_state.pop(VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY, None)
@@ -6836,7 +6820,9 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
             key="custom_bgm_file_input",
             disabled=uploaded_bgm_file is not None,
         )
-        _set_runtime_config("ui", "custom_bgm_file", custom_bgm_file.strip())
+        _set_runtime_config(
+            "ui", "custom_bgm_file", custom_bgm_file.strip()
+        )
         if uploaded_bgm_file is None and custom_bgm_file and bgm_enabled:
             # 文件名由服务层映射到 storage/bgm 或 resource/songs 后校验，
             # UI 不接受两个白名单目录之外的任意路径。
@@ -6917,7 +6903,9 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
             max_chars=sonilo_service.MAX_PROMPT_LENGTH,
             help=tr("Sonilo Music Prompt Help"),
         ).strip()
-        _set_runtime_config("ui", "sonilo_bgm_prompt", params.video_music_prompt)
+        _set_runtime_config(
+            "ui", "sonilo_bgm_prompt", params.video_music_prompt
+        )
         if params.video_count > 1:
             st.warning(tr("Sonilo Multiple Videos Warning"))
         if st.button(
@@ -6944,7 +6932,9 @@ def _render_background_music_settings(params, elevenlabs_api_key_rendered=False)
             max_chars=elevenlabs_music_service.MAX_PROMPT_LENGTH,
             help=tr("ElevenLabs Music Prompt Help"),
         ).strip()
-        _set_runtime_config("ui", "elevenlabs_music_prompt", params.video_music_prompt)
+        _set_runtime_config(
+            "ui", "elevenlabs_music_prompt", params.video_music_prompt
+        )
         if params.video_count > 1:
             st.warning(tr("ElevenLabs Multiple Videos Warning"))
         if st.button(
@@ -7132,8 +7122,9 @@ def _render_audio_settings(panel, params):
                 if voice.is_fish_audio_voice(v):
                     parts = v.split(":", 2)
                     display_name = parts[2] if len(parts) >= 3 else v
-                    return display_name.replace("Female", tr("Female")).replace(
-                        "Male", tr("Male")
+                    return (
+                        display_name.replace("Female", tr("Female"))
+                        .replace("Male", tr("Male"))
                     )
                 if voice.is_voxcpm_voice(v):
                     return v.split(":", 1)[1] or DEFAULT_VOXCPM_VOICE
@@ -7327,8 +7318,7 @@ def _render_audio_settings(panel, params):
             ):
                 saved_fish_api_key = (
                     config.fish_audio.get("api_key", "")
-                    if hasattr(config, "fish_audio")
-                    and isinstance(config.fish_audio, dict)
+                    if hasattr(config, "fish_audio") and isinstance(config.fish_audio, dict)
                     else ""
                 )
                 fish_audio_api_key = st.text_input(
@@ -7346,8 +7336,7 @@ def _render_audio_settings(panel, params):
                 ]
                 saved_fish_model = (
                     config.fish_audio.get("model", "s2.1-pro-free")
-                    if hasattr(config, "fish_audio")
-                    and isinstance(config.fish_audio, dict)
+                    if hasattr(config, "fish_audio") and isinstance(config.fish_audio, dict)
                     else "s2.1-pro-free"
                 )
                 if saved_fish_model not in _fish_audio_models:
@@ -7402,7 +7391,9 @@ def _render_audio_settings(panel, params):
                     key="voxcpm_reference_audio_uploader",
                     help=tr("VoxCPM Reference Audio Help"),
                 )
-                reference_audio = _sync_voxcpm_reference_audio(uploaded_reference_audio)
+                reference_audio = _sync_voxcpm_reference_audio(
+                    uploaded_reference_audio
+                )
                 st.caption(tr("VoxCPM Reference Audio Notice"))
                 reference_audio_error = st.session_state.get(
                     VOXCPM_REFERENCE_AUDIO_ERROR_SESSION_KEY
@@ -7473,7 +7464,9 @@ def _render_audio_settings(panel, params):
                         prompt_error = _get_voxcpm_prompt_validation_error()
                         if prompt_error:
                             st.error(
-                                tr("VoxCPM Prompt Invalid").format(error=prompt_error)
+                                tr("VoxCPM Prompt Invalid").format(
+                                    error=prompt_error
+                                )
                             )
                     else:
                         _clear_voxcpm_prompt_state()
@@ -7538,7 +7531,8 @@ def _render_audio_settings(panel, params):
             ):
                 kokoro_base_url = st.text_input(
                     tr("Kokoro Base URL"),
-                    value=config.kokoro.get("base_url") or DEFAULT_KOKORO_BASE_URL,
+                    value=config.kokoro.get("base_url")
+                    or DEFAULT_KOKORO_BASE_URL,
                     key="kokoro_base_url_input",
                     placeholder=tr("Kokoro Base URL Placeholder"),
                 )
@@ -7792,7 +7786,9 @@ def _render_subtitle_settings(panel, params):
                 disabled=subtitle_settings_disabled,
             )
             params.subtitle_animation = selected_anim
-            _set_runtime_config("ui", "subtitle_animation", params.subtitle_animation)
+            _set_runtime_config(
+                "ui", "subtitle_animation", params.subtitle_animation
+            )
 
             if params.subtitle_position == "custom":
                 saved_custom_position = config.ui.get(
@@ -8088,7 +8084,9 @@ def _render_generation_controls(
             if prompt_validation_error:
                 _remove_active_generation_task(task_id)
                 st.error(
-                    tr("VoxCPM Prompt Invalid").format(error=prompt_validation_error)
+                    tr("VoxCPM Prompt Invalid").format(
+                        error=prompt_validation_error
+                    )
                 )
                 st.stop()
             voxcpm_prompt_audio = _get_voxcpm_effective_prompt_audio()
@@ -8178,7 +8176,9 @@ def _render_generation_controls(
             st.stop()
 
         if params.video_source == "metaso_minimax" and not (
-            metaso_minimax.is_enabled(config.snapshot_config_with_pending(config.app))
+            metaso_minimax.is_enabled(
+                config.snapshot_config_with_pending(config.app)
+            )
         ):
             _remove_active_generation_task(task_id)
             st.error(tr("Please Enter the Metaso MiniMax API Key"))
@@ -8405,9 +8405,7 @@ def _render_generation_controls(
                     utils.task_dir(task_id),
                     "audio.mp3",
                 )
-                _stage_task_audio(
-                    preview_audio_file, reusable_voice_preview["audio_bytes"]
-                )
+                _stage_task_audio(preview_audio_file, reusable_voice_preview["audio_bytes"])
             except OSError as exc:
                 _remove_active_generation_task(task_id)
                 logger.error(f"failed to persist preview task audio: {exc}")
