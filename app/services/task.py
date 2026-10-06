@@ -1335,6 +1335,7 @@ def _run_cross_post(
     youtube_made_for_kids: bool = False,
     upload_account: dict | None = None,
     publishing_metadata: dict | None = None,
+    publishing_settings: dict | None = None,
 ) -> None:
     """后台执行跨平台发布，并只补充发布相关的任务字段。"""
     results = []
@@ -1375,6 +1376,11 @@ def _run_cross_post(
                 language=video_language or "",
                 platform=social_platform,
             )
+            if publishing_settings:
+                metadata = verticals.apply_publishing_templates(
+                    metadata, publishing_settings,
+                    {**publishing_settings.get("template_values", {}), "subject": video_subject},
+                )
             if has_youtube:
                 youtube_extra = {
                     "youtube_title": metadata.get("title", video_subject),
@@ -1538,8 +1544,23 @@ def _schedule_cross_post(
     youtube_privacy_status: str,
     youtube_made_for_kids: bool = False,
     publishing_metadata: dict | None = None,
+    publishing_settings: dict | None = None,
 ) -> str | None:
     """提交后台发布任务；成功返回 None，调度失败返回可查询的错误原因。"""
+    settings = (
+        verticals.get_publishing_settings(getattr(params, "content_vertical", "none"), config.app)
+        if publishing_settings is None else dict(publishing_settings)
+    )
+    try:
+        if settings:
+            settings = verticals.validate_publishing_settings(settings)
+    except ValueError as exc:
+        error = f"invalid vertical publishing settings: {exc}"
+        _patch_cross_post_state(
+            task_id, cross_post_state=const.CROSS_POST_STATE_FAILED,
+            cross_post_error=error, cross_post_owner=None,
+        )
+        return error
     if not _cross_post_slots.acquire(blocking=False):
         error = "cross-post queue is full; publishing was skipped"
         logger.warning(
@@ -1555,6 +1576,27 @@ def _schedule_cross_post(
         return error
 
     try:
+        account = upload_post.upload_post_service.snapshot_account()
+        publish_options = {}
+        if settings:
+            if settings["username"]:
+                account["upload_post_username"] = settings["username"]
+            youtube_privacy_status = settings["youtube_privacy_status"] or youtube_privacy_status
+            bpm = getattr(params, "beat_bpm", 0.0)
+            if getattr(params, "content_vertical", "none") == "type_beat":
+                analysis = task_artifacts.read_script_data(task_id).get("beat_analysis", {})
+                if isinstance(analysis, dict):
+                    bpm = analysis.get("bpm", bpm)
+            settings["template_values"] = {
+                "vertical": getattr(params, "content_vertical", "none"),
+                "bpm": f"{bpm:g}" if isinstance(bpm, (int, float)) and math.isfinite(bpm) and bpm > 0 else "",
+                "key": getattr(params, "beat_key", ""),
+                "genre": getattr(params, "beat_genre", ""),
+                "lease_url": getattr(params, "beat_lease_url", ""),
+            }
+            publish_options["publishing_settings"] = json.loads(json.dumps(settings))
+        if publishing_metadata:
+            publish_options["publishing_metadata"] = json.loads(json.dumps(publishing_metadata))
         future = _cross_post_executor.submit(
             _run_cross_post_with_slot,
             task_id,
@@ -1565,9 +1607,8 @@ def _schedule_cross_post(
             tuple(platforms),
             youtube_privacy_status,
             youtube_made_for_kids,
-            upload_post.upload_post_service.snapshot_account(),
-            **({"publishing_metadata": json.loads(json.dumps(publishing_metadata))}
-               if publishing_metadata else {}),
+            account,
+            **publish_options,
         )
         _register_cross_post_future(task_id, future)
         future.add_done_callback(partial(_finalize_cross_post_future, task_id))
@@ -1943,8 +1984,14 @@ def _run_pipeline(
 
     # 7. 先完成视频生成任务，再按需提交跨平台发布。第三方上传可能耗时
     # 数分钟，不应阻塞视频结果返回，也不能反向影响已经生成的成片。
+    publishing_settings = verticals.get_publishing_settings(params.content_vertical, config.app)
+    publishing_service = upload_post.upload_post_service
+    if publishing_settings.get("username"):
+        account = publishing_service.snapshot_account()
+        account["upload_post_username"] = publishing_settings["username"]
+        publishing_service = upload_post.UploadPostService(account)
     cross_post_enabled = (
-        upload_post.upload_post_service.is_configured()
+        publishing_service.is_configured()
         and upload_post.upload_post_service.auto_upload
     )
     platforms = (
@@ -1993,6 +2040,7 @@ def _run_pipeline(
                 upload_post.upload_post_service.youtube_made_for_kids
             ),
             **({"publishing_metadata": publishing_metadata} if publishing_metadata else {}),
+            **({"publishing_settings": publishing_settings} if publishing_settings else {}),
         )
         # 队列满或线程池关闭属于同步可知的调度失败。任务状态已经由调度函数
         # 更新，这里同步修正返回快照，避免调用方收到与后续查询不一致的 pending。

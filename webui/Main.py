@@ -5067,6 +5067,42 @@ def _apply_content_vertical() -> None:
     st.session_state["content_vertical_notes"] = applied["notes"]
 
 
+def _render_vertical_publishing_settings(params):
+    key = params.content_vertical
+    if key == "none":
+        return
+    settings = verticals.get_publishing_settings(key, config.app)
+    with st.expander(tr("Vertical Publishing Settings"), expanded=False):
+        st.caption(tr("Vertical Publishing Help"))
+        values = {
+            "username": st.text_input(
+                tr("Upload-Post Profile Username"), value=settings.get("username", ""),
+                key=f"vertical_publish_{key}_username",
+            ),
+            "title_template": st.text_input(
+                tr("Publishing Title Template"), value=settings.get("title_template", ""),
+                key=f"vertical_publish_{key}_title_template",
+            ),
+            "description_template": st.text_area(
+                tr("Publishing Description Template"), value=settings.get("description_template", ""),
+                key=f"vertical_publish_{key}_description_template", height=100,
+            ),
+        }
+        privacy_options = ["", "public", "unlisted", "private"]
+        privacy_labels = {value: value or tr("Inherit Global Privacy") for value in privacy_options}
+        saved_privacy = settings.get("youtube_privacy_status", "")
+        values["youtube_privacy_status"] = st.selectbox(
+            tr("YouTube Privacy Status"), options=privacy_options,
+            index=privacy_options.index(saved_privacy) if saved_privacy in privacy_options else 0,
+            format_func=privacy_labels.get,
+            key=f"vertical_publish_{key}_youtube_privacy_status",
+        )
+        if any(value != settings.get(field, "") for field, value in values.items()):
+            bindings = dict(config.app.get("upload_post_verticals", {}))
+            bindings[key] = {**bindings.get(key, {}), **values}
+            _set_runtime_config("app", "upload_post_verticals", bindings)
+
+
 def _render_script_settings(panel, params):
     """渲染文案设置并更新生成参数。"""
     with panel:
@@ -5236,6 +5272,8 @@ def _render_script_settings(panel, params):
                                 custom_system_prompt=params.custom_system_prompt,
                             )
                         )
+
+            _render_vertical_publishing_settings(params)
 
             # 模型发现只增强视频素材，不改变用户明确选择的文案 Provider。
             if _effective_script_generation_backend() == "loomloom":

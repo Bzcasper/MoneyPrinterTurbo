@@ -622,6 +622,11 @@
     "Beat Genre": "节拍风格",
     "Beat Lease URL": "节拍授权链接",
     "Beat Publishing Metadata": "节拍标题、简介和标签",
-    "DIY Step Visuals Help": "每个脚本段落使用一张图片，持续到该段旁白结束。镜头依次使用左移、右移、倾斜和平缓缩小。"
+    "DIY Step Visuals Help": "每个脚本段落使用一张图片，持续到该段旁白结束。镜头依次使用左移、右移、倾斜和平缓缩小。",
+    "Vertical Publishing Settings": "内容类型发布设置",
+    "Publishing Title Template": "标题模板",
+    "Publishing Description Template": "描述模板",
+    "Inherit Global Privacy": "使用全局隐私设置",
+    "Vertical Publishing Help": "留空时使用全局账号和生成的元数据。模板变量：{subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}。隐私设置适用于 YouTube。"
   }
 }

@@ -622,6 +622,11 @@
     "Beat Genre": "Beat Genre",
     "Beat Lease URL": "Beat Lease URL",
     "Beat Publishing Metadata": "Beat Title, Description and Tags",
-    "DIY Step Visuals Help": "One image per script paragraph, held for its narration. Camera moves cycle through left pan, right pan, tilt and zoom out."
+    "DIY Step Visuals Help": "One image per script paragraph, held for its narration. Camera moves cycle through left pan, right pan, tilt and zoom out.",
+    "Vertical Publishing Settings": "Vertical Publishing Settings",
+    "Publishing Title Template": "Title Template",
+    "Publishing Description Template": "Description Template",
+    "Inherit Global Privacy": "Use Global Privacy",
+    "Vertical Publishing Help": "Blank fields use the global profile and generated metadata. Templates: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Privacy applies to YouTube."
   }
 }

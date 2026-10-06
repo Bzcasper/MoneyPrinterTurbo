@@ -10,6 +10,8 @@ starts from prompts that already know the genre instead of generic ones.
 
 from __future__ import annotations
 
+from string import Formatter
+
 DIY_SCRIPT_PROMPT = """Write a spoken, TTS-safe DIY tutorial in the requested language.
 Write all numbers and units as words. Use no markdown, titles, bullets, emoji,
 parentheses, welcome lines or subscribe lines. Start with a finished-result
@@ -136,6 +138,61 @@ VERTICALS: dict[str, dict] = {
 }
 
 VERTICAL_ORDER = ("none", "diy", "type_beat", "jewelry")
+
+_PUBLISHING_FIELDS = ("username", "title_template", "description_template", "youtube_privacy_status")
+_PUBLISHING_TEMPLATE_FIELDS = frozenset({
+    "subject", "title", "description", "hashtags", "vertical", "bpm", "key", "genre", "lease_url",
+})
+
+
+def get_publishing_settings(key: str, app_config: dict) -> dict:
+    """Read only this vertical's optional public publishing overrides."""
+    bindings = app_config.get("upload_post_verticals", {})
+    binding = bindings.get(key, {}) if isinstance(bindings, dict) and key != "none" else {}
+    if not isinstance(binding, dict):
+        return {}
+    settings = {field: binding.get(field, "") for field in _PUBLISHING_FIELDS}
+    return settings if any(settings.values()) else {}
+
+
+def validate_publishing_settings(settings: dict) -> dict:
+    """Validate templates before queueing an upload; never include values in errors."""
+    if not isinstance(settings, dict):
+        raise ValueError("vertical publishing settings must be a table")
+    normalized = {}
+    for field in _PUBLISHING_FIELDS:
+        value = settings.get(field, "")
+        if not isinstance(value, str):
+            raise ValueError("vertical publishing fields must be strings")
+        normalized[field] = value.strip()
+    if normalized["youtube_privacy_status"] not in {"", "public", "unlisted", "private"}:
+        raise ValueError("vertical YouTube privacy must be public, unlisted, private or blank")
+    for field in ("title_template", "description_template"):
+        try:
+            for _, placeholder, spec, conversion in Formatter().parse(normalized[field]):
+                if placeholder is not None and (
+                    placeholder not in _PUBLISHING_TEMPLATE_FIELDS or spec or conversion
+                ):
+                    raise ValueError("unsupported placeholder")
+        except ValueError as exc:
+            raise ValueError("publishing templates contain an unsupported or malformed placeholder") from exc
+    return normalized
+
+
+def apply_publishing_templates(metadata: dict, settings: dict, context: dict) -> dict:
+    """Keep generated metadata as the fallback and substitute explicit templates."""
+    settings = validate_publishing_settings(settings)
+    result = dict(metadata)
+    values = {field: str(context.get(field) or "") for field in _PUBLISHING_TEMPLATE_FIELDS}
+    values.update(
+        title=str(metadata.get("title") or context.get("subject") or ""),
+        description=str(metadata.get("caption") or ""),
+        hashtags=" ".join(str(tag) for tag in (metadata.get("hashtags") or [])),
+    )
+    for field, template in (("title", "title_template"), ("caption", "description_template")):
+        if settings[template]:
+            result[field] = settings[template].format_map(values)
+    return result
 
 
 def get_vertical(key: str) -> dict:

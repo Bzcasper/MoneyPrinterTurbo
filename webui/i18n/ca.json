@@ -463,6 +463,11 @@
     "Beat Genre": "Gènere del beat",
     "Beat Lease URL": "URL de llicència del beat",
     "Beat Publishing Metadata": "Títol, descripció i etiquetes del beat",
-    "DIY Step Visuals Help": "Una imatge per paràgraf del guió, durant la seva narració. La càmera alterna desplaçament a l’esquerra, a la dreta, vertical i zoom enrere."
+    "DIY Step Visuals Help": "Una imatge per paràgraf del guió, durant la seva narració. La càmera alterna desplaçament a l’esquerra, a la dreta, vertical i zoom enrere.",
+    "Vertical Publishing Settings": "Publicació per tipus de contingut",
+    "Publishing Title Template": "Plantilla del títol",
+    "Publishing Description Template": "Plantilla de la descripció",
+    "Inherit Global Privacy": "Utilitza la privadesa global",
+    "Vertical Publishing Help": "Els camps buits utilitzen el perfil global i les metadades generades. Plantilles: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. La privadesa s’aplica a YouTube."
   }
 }

@@ -744,3 +744,24 @@ open_task_folder_on_completion = true
 # subtitle_background_enabled = false
 # subtitle_background_color = "#000000"
 # rounded_subtitle_background = false
+
+# Optional per-vertical Upload-Post bindings. Blank fields inherit the global
+# profile, generated metadata and YouTube privacy. Templates support {subject},
+# {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}.
+[app.upload_post_verticals.diy]
+username = ""
+title_template = ""
+description_template = ""
+youtube_privacy_status = ""
+
+[app.upload_post_verticals.type_beat]
+username = ""
+title_template = ""
+description_template = ""
+youtube_privacy_status = ""
+
+[app.upload_post_verticals.jewelry]
+username = ""
+title_template = ""
+description_template = ""
+youtube_privacy_status = ""

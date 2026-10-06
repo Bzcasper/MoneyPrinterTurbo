@@ -463,6 +463,11 @@
     "Beat Genre": "Beat türü",
     "Beat Lease URL": "Beat lisans URL'si",
     "Beat Publishing Metadata": "Beat başlığı, açıklaması ve etiketleri",
-    "DIY Step Visuals Help": "Her senaryo paragrafı için bir görsel, o paragrafın anlatımı boyunca gösterilir. Kamera sola, sağa, dikey hareket ve uzaklaşma arasında döner."
+    "DIY Step Visuals Help": "Her senaryo paragrafı için bir görsel, o paragrafın anlatımı boyunca gösterilir. Kamera sola, sağa, dikey hareket ve uzaklaşma arasında döner.",
+    "Vertical Publishing Settings": "İçerik türüne göre yayın ayarları",
+    "Publishing Title Template": "Başlık şablonu",
+    "Publishing Description Template": "Açıklama şablonu",
+    "Inherit Global Privacy": "Genel gizliliği kullan",
+    "Vertical Publishing Help": "Boş alanlar genel profili ve üretilen meta verileri kullanır. Şablonlar: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Gizlilik YouTube için geçerlidir."
   }
 }
