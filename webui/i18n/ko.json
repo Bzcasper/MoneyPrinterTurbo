@@ -394,6 +394,8 @@
     "Firefly Text-to-Image Help": "Generate images with Adobe Firefly through the self-hosted n8n provider (unlimited fair use, each image takes minutes). Auth is held by the n8n workflow.",
     "Firefly Webhook URL": "Firefly Webhook URL",
     "Firefly Webhook URL Help": "Full URL of the n8n Firefly provider webhook, e.g. http://localhost:5678/webhook/firefly-provider-generate",
+    "Firefly Webhook Token": "Firefly Webhook 토큰",
+    "Firefly Webhook Token Help": "Webhook에만 전송되는 선택적 Bearer 토큰입니다. 인증 헤더를 보내지 않으려면 비워 두세요.",
     "Firefly Advanced Settings": "Firefly Advanced Settings",
     "Firefly Image Model": "Firefly Image Model",
     "Firefly Image Model Help": "Text-to-image model requested from the n8n chain. Only models verified under unlimited fair use (0 credits) are listed; other Adobe models may be charged credits.",

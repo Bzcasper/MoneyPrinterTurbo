@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.parse import quote, quote_plus
 
 from PIL import Image
 
@@ -48,6 +49,7 @@ class TestFireflyImageProvider(unittest.TestCase):
             "http://localhost:5678/webhook/firefly-provider-generate"
         )
         config.app.pop("firefly_prompt_template", None)
+        config.app.pop("firefly_webhook_token", None)
         config.app.pop("tls_verify", None)
         config.proxy.clear()
 
@@ -96,6 +98,8 @@ class TestFireflyImageProvider(unittest.TestCase):
             post.call_args.args[0],
             "http://localhost:5678/webhook/firefly-provider-generate",
         )
+        self.assertNotIn("headers", post.call_args.kwargs)
+        self.assertNotIn("Authorization", get.call_args.kwargs["headers"])
         payload = post.call_args.kwargs["json"]
         self.assertEqual(payload["media_type"], "image")
         self.assertEqual((payload["width"], payload["height"]), (1080, 1920))
@@ -112,6 +116,89 @@ class TestFireflyImageProvider(unittest.TestCase):
             item.source_info["rendition"],
             {"id": None, "width": 200, "height": 300},
         )
+
+    def test_firefly_token_is_sent_only_to_webhook(self):
+        config.app["firefly_webhook_token"] = "  example-firefly-token  "
+        response = _webhook_response({
+            "success": True, "image_url": "https://cdn.example.com/image.png",
+        })
+        with (
+            patch("app.services.material.requests.post", return_value=response) as post,
+            patch("app.services.material.requests.get", return_value=_download_response(_png_bytes())) as get,
+        ):
+            content, detail = material._request_firefly_image("test scene", 64, 96)
+        self.assertTrue(content)
+        self.assertEqual(detail, "")
+        self.assertEqual(post.call_args.kwargs["headers"], {
+            "Authorization": "Bearer example-firefly-token",
+        })
+        self.assertNotIn("Authorization", get.call_args.kwargs["headers"])
+
+    def test_firefly_blank_token_sends_no_auth_header(self):
+        for token in ("", "   ", None):
+            config.app["firefly_webhook_token"] = token
+            response = _webhook_response({"success": False})
+            with (
+                self.subTest(token_is_none=token is None),
+                patch("app.services.material.requests.post", return_value=response) as post,
+                patch("app.services.material.time.sleep"),
+            ):
+                material._request_firefly_image("test scene", 64, 96)
+            self.assertNotIn("headers", post.call_args.kwargs)
+
+    def test_firefly_redacts_token_in_request_errors_and_response_metadata(self):
+        token = "test token+/value"
+        config.app["firefly_webhook_token"] = token
+        variants = (token, quote_plus(token), quote(token, safe=""))
+        echo = " | ".join(variants)
+        responses = (
+            RuntimeError(f"connection error: {echo}"),
+            _webhook_response({"provider": echo, "message": echo}, 403),
+            _webhook_response({"success": False, "message": echo}),
+        )
+        for response in responses:
+            with (
+                self.subTest(response_type=type(response).__name__),
+                patch("app.services.material.requests.post", side_effect=response if isinstance(response, Exception) else None, return_value=response),
+                patch("app.services.material.time.sleep"),
+                patch("app.services.material.logger") as log,
+            ):
+                content, detail = material._request_firefly_image("test scene", 64, 96)
+            self.assertIsNone(content)
+            output = detail + " ".join(str(call.args) for call in log.mock_calls)
+            for variant in variants:
+                self.assertNotIn(variant, output)
+            self.assertIn("***", output)
+
+    def test_firefly_redacts_token_before_truncating_response_errors(self):
+        token = "example-firefly-long-token"
+        config.app["firefly_webhook_token"] = token
+        response = _webhook_response({"message": "x" * 295 + token}, 403)
+        with (
+            patch("app.services.material.requests.post", return_value=response),
+            patch("app.services.material.time.sleep"),
+            patch("app.services.material.logger") as log,
+        ):
+            _, detail = material._request_firefly_image("test scene", 64, 96)
+        output = detail + " ".join(str(call.args) for call in log.mock_calls)
+        self.assertNotIn("examp", output)
+        self.assertIn("***", output)
+
+    def test_firefly_download_failure_redacts_token_and_keeps_paid_fail_fast(self):
+        token = "example-firefly-token"
+        config.app["firefly_webhook_token"] = token
+        response = _webhook_response({"success": True, "image_url": "https://cdn.example.com/image.png"})
+        with (
+            patch("app.services.material.requests.post", return_value=response) as post,
+            patch("app.services.material.requests.get", side_effect=RuntimeError(f"download failed {token}")),
+            patch("app.services.material.time.sleep"),
+            patch("app.services.material.logger") as log,
+        ):
+            with self.assertRaises(material.OpenAIImagePaidResultError) as error:
+                material._request_firefly_image("test scene", 64, 96)
+        self.assertEqual(post.call_count, 1)
+        output = str(error.exception) + " ".join(str(call.args) for call in log.mock_calls)
+        self.assertNotIn(token, output)
 
     def test_generate_images_firefly_failure_skips_term(self):
         """明确拒绝必须按素材源约定返回空列表，不能中断任务。"""
