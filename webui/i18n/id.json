@@ -478,6 +478,9 @@
     "Firefly Generation Estimate": "Perkiraan Firefly: {images} gambar, {minutes} menit untuk pembuatan gambar, konkurensi {concurrency}.",
     "Firefly Estimate Unavailable": "Perkiraan memerlukan prompt adegan yang valid dan satu prompt per paragraf DIY.",
     "Firefly Estimate Assumed": "Perencanaan mengasumsikan dua hingga lima menit per gambar sampai ada hasil uji. Tidak termasuk naskah, audio, render dan unggahan; antrean serta percobaan ulang dapat menambah waktu.",
-    "Firefly Estimate Measured": "Rentang waktu memakai uji gambar terakhir dengan webhook, model dan rasio aspek ini. Tidak termasuk naskah, audio, render dan unggahan; antrean serta percobaan ulang dapat menambah waktu."
+    "Firefly Estimate Measured": "Rentang waktu memakai uji gambar terakhir dengan webhook, model dan rasio aspek ini. Tidak termasuk naskah, audio, render dan unggahan; antrean serta percobaan ulang dapat menambah waktu.",
+    "Firefly Hero Shot": "Adegan Utama Video Firefly",
+    "Firefly Hero Shot Help": "Buat satu video lima detik untuk adegan pertama. Gambar dengan zoom mengisi adegan yang lebih panjang dan adegan lainnya. Menambahkan satu permintaan pembuatan video.",
+    "Firefly Hero Estimate": "Menambahkan satu permintaan video. Perkiraan hanya mencakup gambar; waktu pembuatan video merupakan tambahan."
   }
 }
