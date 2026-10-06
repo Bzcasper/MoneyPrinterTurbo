@@ -463,6 +463,11 @@
     "Beat Genre": "Genre du beat",
     "Beat Lease URL": "URL de licence du beat",
     "Beat Publishing Metadata": "Titre, description et tags du beat",
-    "DIY Step Visuals Help": "Une image par paragraphe du script, pendant sa narration. La caméra alterne panoramique gauche, droite, vertical et zoom arrière."
+    "DIY Step Visuals Help": "Une image par paragraphe du script, pendant sa narration. La caméra alterne panoramique gauche, droite, vertical et zoom arrière.",
+    "Vertical Publishing Settings": "Publication par type de contenu",
+    "Publishing Title Template": "Modèle de titre",
+    "Publishing Description Template": "Modèle de description",
+    "Inherit Global Privacy": "Utiliser la confidentialité globale",
+    "Vertical Publishing Help": "Les champs vides utilisent le profil global et les métadonnées générées. Modèles : {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. La confidentialité s’applique à YouTube."
   }
 }

@@ -463,6 +463,11 @@
     "Beat Genre": "Genre beat",
     "Beat Lease URL": "URL lisensi beat",
     "Beat Publishing Metadata": "Judul, deskripsi dan tag beat",
-    "DIY Step Visuals Help": "Satu gambar per paragraf naskah, sepanjang narasinya. Gerakan kamera bergantian ke kiri, kanan, vertikal, lalu memperkecil tampilan."
+    "DIY Step Visuals Help": "Satu gambar per paragraf naskah, sepanjang narasinya. Gerakan kamera bergantian ke kiri, kanan, vertikal, lalu memperkecil tampilan.",
+    "Vertical Publishing Settings": "Publikasi per jenis konten",
+    "Publishing Title Template": "Templat judul",
+    "Publishing Description Template": "Templat deskripsi",
+    "Inherit Global Privacy": "Gunakan privasi global",
+    "Vertical Publishing Help": "Kolom kosong memakai profil global dan metadata yang dihasilkan. Templat: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Privasi berlaku untuk YouTube."
   }
 }
