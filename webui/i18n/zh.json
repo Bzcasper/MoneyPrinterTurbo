@@ -473,6 +473,7 @@
     "OpenAI Image API Key": "OpenAI 兼容文生图 API 密钥",
     "OpenAI Image Model": "OpenAI 兼容文生图模型",
     "Please Configure the OpenAI Image Source": "请配置 OpenAI 兼容文生图的 **Base URL** 和 **模型**（本地网关可免填 **API 密钥**）",
+    "Adobe Firefly Text-to-Image": "Adobe Firefly 文生图",
     "Firefly Text-to-Image": "Adobe Firefly 文生图",
     "Firefly Text-to-Image Help": "经自托管 n8n 链路调用 Adobe Firefly 生成图片（unlimited fair use，单张耗时数分钟）。鉴权由 n8n 工作流持有。",
     "Firefly Webhook URL": "Firefly Webhook 地址",

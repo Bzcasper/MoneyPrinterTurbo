@@ -473,6 +473,7 @@
     "OpenAI Image API Key": "OpenAI Compatible Image API Key",
     "OpenAI Image Model": "OpenAI Compatible Image Model",
     "Please Configure the OpenAI Image Source": "Please configure the **Base URL** and **Model** for the OpenAI compatible image source (**API Key** optional for local gateways)",
+    "Adobe Firefly Text-to-Image": "Adobe Firefly Text-to-Image",
     "Firefly Text-to-Image": "Adobe Firefly Text-to-Image",
     "Firefly Text-to-Image Help": "Generate images with Adobe Firefly through the self-hosted n8n provider (unlimited fair use, each image takes minutes). Auth is held by the n8n workflow.",
     "Firefly Webhook URL": "Firefly Webhook URL",
