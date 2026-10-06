@@ -463,6 +463,11 @@
     "Beat Genre": "Жанр бита",
     "Beat Lease URL": "URL лицензии бита",
     "Beat Publishing Metadata": "Название, описание и теги бита",
-    "DIY Step Visuals Help": "Одно изображение на абзац сценария на всё время его озвучивания. Камера поочерёдно движется влево, вправо, по вертикали и отдаляется."
+    "DIY Step Visuals Help": "Одно изображение на абзац сценария на всё время его озвучивания. Камера поочерёдно движется влево, вправо, по вертикали и отдаляется.",
+    "Vertical Publishing Settings": "Публикация по типу контента",
+    "Publishing Title Template": "Шаблон заголовка",
+    "Publishing Description Template": "Шаблон описания",
+    "Inherit Global Privacy": "Использовать общую видимость",
+    "Vertical Publishing Help": "Пустые поля используют общий профиль и созданные метаданные. Шаблоны: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Видимость применяется к YouTube."
   }
 }

@@ -463,6 +463,11 @@
     "Beat Genre": "Bitin janrı",
     "Beat Lease URL": "Bitin lisenziya URL-si",
     "Beat Publishing Metadata": "Bitin adı, təsviri və teqləri",
-    "DIY Step Visuals Help": "Hər ssenari abzası üçün bir şəkil, həmin abzasın səsləndirilməsi boyu göstərilir. Kamera sola, sağa, şaquli hərəkət və uzaqlaşma arasında növbələşir."
+    "DIY Step Visuals Help": "Hər ssenari abzası üçün bir şəkil, həmin abzasın səsləndirilməsi boyu göstərilir. Kamera sola, sağa, şaquli hərəkət və uzaqlaşma arasında növbələşir.",
+    "Vertical Publishing Settings": "Məzmun növünə görə paylaşım",
+    "Publishing Title Template": "Başlıq şablonu",
+    "Publishing Description Template": "Təsvir şablonu",
+    "Inherit Global Privacy": "Ümumi məxfilikdən istifadə et",
+    "Vertical Publishing Help": "Boş sahələr ümumi profildən və yaradılmış metadatadan istifadə edir. Şablonlar: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Məxfilik YouTube üçün tətbiq olunur."
   }
 }

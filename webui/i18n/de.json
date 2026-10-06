@@ -463,6 +463,11 @@
     "Beat Genre": "Beat-Genre",
     "Beat Lease URL": "Beat-Lizenz-URL",
     "Beat Publishing Metadata": "Beat-Titel, Beschreibung und Tags",
-    "DIY Step Visuals Help": "Ein Bild pro Skriptabsatz, passend zur Dauer der Erzählung. Kamerabewegungen wechseln zwischen links, rechts, vertikal und Herauszoomen."
+    "DIY Step Visuals Help": "Ein Bild pro Skriptabsatz, passend zur Dauer der Erzählung. Kamerabewegungen wechseln zwischen links, rechts, vertikal und Herauszoomen.",
+    "Vertical Publishing Settings": "Veröffentlichung nach Inhaltstyp",
+    "Publishing Title Template": "Titelvorlage",
+    "Publishing Description Template": "Beschreibungsvorlage",
+    "Inherit Global Privacy": "Globale Sichtbarkeit verwenden",
+    "Vertical Publishing Help": "Leere Felder verwenden das globale Profil und generierte Metadaten. Vorlagen: {subject}, {title}, {description}, {hashtags}, {vertical}, {bpm}, {key}, {genre}, {lease_url}. Die Sichtbarkeit gilt für YouTube."
   }
 }
