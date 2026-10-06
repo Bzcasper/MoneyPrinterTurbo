@@ -481,6 +481,8 @@
     "Firefly Webhook Token": "Firefly Webhook 令牌",
     "Firefly Webhook Token Help": "可选 Bearer 令牌，仅发送至 webhook。留空则不发送鉴权头。",
     "Firefly Advanced Settings": "Firefly 高级设置",
+    "Firefly Concurrency": "Firefly 并发数",
+    "Firefly Concurrency Help": "同时生成一至四张图片。设为一则逐张生成；较高的值可能增加服务负载。",
     "Firefly Image Model": "Firefly 图片模型",
     "Firefly Image Model Help": "向 n8n 链路请求的文生图模型。仅列出已在 unlimited fair use（0 积分）下验证通过的模型；其它 Adobe 模型可能消耗积分。",
     "Firefly Prompt Template": "Firefly 提示词模板",

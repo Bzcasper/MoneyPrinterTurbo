@@ -4086,6 +4086,19 @@ def _render_settings_dialog():
                 )
 
                 with st.expander(tr("Firefly Advanced Settings"), expanded=False):
+                    firefly_concurrency = st.number_input(
+                        tr("Firefly Concurrency"),
+                        min_value=1,
+                        max_value=4,
+                        value=material._get_firefly_concurrency(),
+                        step=1,
+                        help=tr("Firefly Concurrency Help"),
+                        key="firefly_concurrency_input",
+                    )
+                    _set_runtime_config(
+                        "app", "firefly_concurrency", int(firefly_concurrency)
+                    )
+
                     firefly_image_model = st.selectbox(
                         tr("Firefly Image Model"),
                         options=list(material.FIREFLY_IMAGE_MODELS.keys()),

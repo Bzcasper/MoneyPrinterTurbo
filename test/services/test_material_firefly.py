@@ -3,7 +3,9 @@ import io
 import os
 import shutil
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import quote, quote_plus
@@ -50,6 +52,7 @@ class TestFireflyImageProvider(unittest.TestCase):
         )
         config.app.pop("firefly_prompt_template", None)
         config.app.pop("firefly_webhook_token", None)
+        config.app.pop("firefly_concurrency", None)
         config.app.pop("tls_verify", None)
         config.proxy.clear()
 
@@ -332,6 +335,185 @@ class TestFireflyImageProvider(unittest.TestCase):
         gen.assert_not_called()
         self.assertEqual(paths, [])
 
+
+    def _firefly_test_item(self, term):
+        return material.MaterialInfo(
+            provider="firefly",
+            url=os.path.join(self.save_dir, f"{term}.png"),
+            duration=5,
+            source_info={"provider": "firefly", "search_term": term},
+        )
+
+    def _run_firefly_test_terms(self, terms, duration):
+        return material._download_videos_firefly_on_demand(
+            task_id="firefly-concurrency-test",
+            search_terms=terms,
+            video_aspect=material.VideoAspect.portrait,
+            audio_duration=duration,
+            max_clip_duration=5,
+            material_directory=self.save_dir,
+        )
+
+    def test_firefly_concurrency_defaults_and_clamps(self):
+        self.assertEqual(material._get_firefly_concurrency(), 1)
+        for value, expected in ((None, 1), ("bad", 1), (float("inf"), 1), (-2, 1), (0, 1), ("3", 3), (4, 4), (99, 4)):
+            with self.subTest(expected=expected):
+                config.app["firefly_concurrency"] = value
+                self.assertEqual(material._get_firefly_concurrency(), expected)
+
+    def test_firefly_parallel_results_keep_script_order(self):
+        config.app["firefly_concurrency"] = 3
+        started = threading.Barrier(3, timeout=5)
+        rendered = {term: threading.Event() for term in ("one", "two", "three")}
+        completion_order = []
+
+        def generate(search_term, **kwargs):
+            started.wait()
+            return [self._firefly_test_item(search_term)]
+
+        def render(path, duration):
+            term = os.path.basename(path).removesuffix(".png")
+            if term == "one":
+                self.assertTrue(rendered["two"].wait(5))
+            elif term == "two":
+                self.assertTrue(rendered["three"].wait(5))
+            completion_order.append(term)
+            rendered[term].set()
+            return path.replace(".png", ".mp4")
+
+        with (
+            patch("app.services.material.generate_images_firefly", side_effect=generate) as gen,
+            patch("app.services.material._render_openai_image_video", side_effect=render),
+            patch("app.services.material._persist_material_sources") as persist,
+            patch.object(material.logging_utils, "bind_log_scope", wraps=material.logging_utils.bind_log_scope) as bind,
+        ):
+            paths = self._run_firefly_test_terms(["one", "two", "three", "unused"], 11)
+        self.assertEqual(completion_order, ["three", "two", "one"])
+        self.assertEqual([os.path.basename(path) for path in paths], ["one.mp4", "two.mp4", "three.mp4"])
+        self.assertEqual(gen.call_count, 3)
+        self.assertEqual(bind.call_count, 3)
+        self.assertEqual([record["search_term"] for record in persist.call_args.args[1]], ["one", "two", "three"])
+
+    def test_firefly_parallel_uses_next_unused_terms_in_follow_up_wave(self):
+        config.app["firefly_concurrency"] = 2
+        first_wave = set()
+        lock = threading.Lock()
+
+        def generate(search_term, **kwargs):
+            with lock:
+                if search_term == "four":
+                    self.assertEqual(first_wave, {"one", "two", "three"})
+                else:
+                    first_wave.add(search_term)
+            return [] if search_term == "one" else [self._firefly_test_item(search_term)]
+
+        with (
+            patch("app.services.material.generate_images_firefly", side_effect=generate) as gen,
+            patch("app.services.material._render_openai_image_video", side_effect=lambda path, duration: path.replace(".png", ".mp4")),
+            patch("app.services.material._persist_material_sources"),
+        ):
+            paths = self._run_firefly_test_terms(["one", "two", "three", "four", "unused"], 11)
+        self.assertEqual([os.path.basename(path) for path in paths], ["two.mp4", "three.mp4", "four.mp4"])
+        self.assertEqual(sorted(call.kwargs["search_term"] for call in gen.call_args_list), ["four", "one", "three", "two"])
+
+    def test_firefly_parallel_paid_failure_cancels_pending_without_waiting(self):
+        config.app["firefly_concurrency"] = 2
+        second_started = threading.Event()
+        release_second = threading.Event()
+        requested = []
+        pool = ThreadPoolExecutor(max_workers=2)
+
+        def generate(search_term, **kwargs):
+            requested.append(search_term)
+            if search_term == "one":
+                self.assertTrue(second_started.wait(5))
+                raise material.OpenAIImagePaidResultError("paid result unavailable")
+            if search_term == "two":
+                second_started.set()
+                self.assertTrue(release_second.wait(10))
+            return [self._firefly_test_item(search_term)]
+
+        with (
+            ThreadPoolExecutor(max_workers=1) as caller,
+            patch("app.services.material.ThreadPoolExecutor", return_value=pool),
+            patch.object(pool, "shutdown", wraps=pool.shutdown) as shutdown,
+            patch("app.services.material.generate_images_firefly", side_effect=generate),
+            patch("app.services.material._render_openai_image_video", side_effect=lambda path, duration: path.replace(".png", ".mp4")),
+            patch("app.services.material._persist_material_sources") as persist,
+        ):
+            future = caller.submit(self._run_firefly_test_terms, ["one", "two", "unused-three", "unused-four"], 20)
+            try:
+                with self.assertRaises(material.OpenAIImagePaidResultError):
+                    future.result(timeout=5)
+                persist.assert_called_once_with("firefly-concurrency-test", [])
+                self.assertTrue(any(call.kwargs == {"wait": False, "cancel_futures": True} for call in shutdown.call_args_list))
+            finally:
+                release_second.set()
+                pool.shutdown(wait=True, cancel_futures=True)
+        self.assertEqual(sorted(requested), ["one", "two"])
+
+    def test_firefly_parallel_paid_failure_persists_completed_sources(self):
+        config.app["firefly_concurrency"] = 2
+        second_started = threading.Event()
+        first_completed = threading.Event()
+        pool = ThreadPoolExecutor(max_workers=2)
+        real_submit = pool.submit
+
+        def submit(*args, **kwargs):
+            future = real_submit(*args, **kwargs)
+            if args[1] == 0:
+                future.add_done_callback(lambda done: first_completed.set())
+            return future
+
+        def generate(search_term, **kwargs):
+            if search_term == "one":
+                self.assertTrue(second_started.wait(5))
+                return [self._firefly_test_item(search_term)]
+            second_started.set()
+            self.assertTrue(first_completed.wait(5))
+            raise material.OpenAIImagePaidResultError("paid result unavailable")
+
+        with (
+            patch("app.services.material.ThreadPoolExecutor", return_value=pool),
+            patch.object(pool, "submit", side_effect=submit),
+            patch("app.services.material.generate_images_firefly", side_effect=generate),
+            patch("app.services.material._render_openai_image_video", side_effect=lambda path, duration: path.replace(".png", ".mp4")),
+            patch("app.services.material._persist_material_sources") as persist,
+        ):
+            try:
+                with self.assertRaises(material.OpenAIImagePaidResultError):
+                    self._run_firefly_test_terms(["one", "two"], 10)
+            finally:
+                pool.shutdown(wait=True, cancel_futures=True)
+        self.assertEqual([record["search_term"] for record in persist.call_args.args[1]], ["one"])
+
+    def test_firefly_concurrency_one_keeps_serial_fallback_and_stop(self):
+        config.app["firefly_concurrency"] = 1
+
+        def generate(search_term, **kwargs):
+            return [] if search_term == "one" else [self._firefly_test_item(search_term)]
+
+        with (
+            patch("app.services.material.ThreadPoolExecutor") as executor,
+            patch("app.services.material.generate_images_firefly", side_effect=generate) as gen,
+            patch("app.services.material._render_openai_image_video", side_effect=lambda path, duration: path.replace(".png", ".mp4")),
+            patch("app.services.material._persist_material_sources"),
+        ):
+            paths = self._run_firefly_test_terms(["one", "two", "three", "unused"], 6)
+        executor.assert_not_called()
+        self.assertEqual([call.kwargs["search_term"] for call in gen.call_args_list], ["one", "two", "three"])
+        self.assertEqual([os.path.basename(path) for path in paths], ["two.mp4", "three.mp4"])
+
+    def test_firefly_nonfinite_duration_never_starts_requests(self):
+        config.app["firefly_concurrency"] = 4
+        for duration in (float("nan"), float("inf"), float("-inf")):
+            with (
+                self.subTest(duration_is_finite=False),
+                patch("app.services.material.generate_images_firefly") as gen,
+                patch("app.services.material._persist_material_sources"),
+            ):
+                self.assertEqual(self._run_firefly_test_terms(["one"], duration), [])
+            gen.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

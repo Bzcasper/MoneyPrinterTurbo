@@ -397,6 +397,8 @@
     "Firefly Webhook Token": "Firefly Webhook Tokeni",
     "Firefly Webhook Token Help": "Yalnız webhook-a göndərilən əlavə Bearer tokeni. Autentifikasiya başlığı göndərməmək üçün boş saxlayın.",
     "Firefly Advanced Settings": "Firefly Advanced Settings",
+    "Firefly Concurrency": "Firefly paralel sorğuları",
+    "Firefly Concurrency Help": "Eyni vaxtda bir-dörd şəkil sorğusu. Bir ardıcıl generasiyanı saxlayır; daha yüksək dəyərlər xidmət yükünü artıra bilər.",
     "Firefly Image Model": "Firefly Image Model",
     "Firefly Image Model Help": "Text-to-image model requested from the n8n chain. Only models verified under unlimited fair use (0 credits) are listed; other Adobe models may be charged credits.",
     "Firefly Prompt Template": "Firefly Prompt Template",

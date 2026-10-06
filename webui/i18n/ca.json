@@ -397,6 +397,8 @@
     "Firefly Webhook Token": "Token del webhook de Firefly",
     "Firefly Webhook Token Help": "Token Bearer opcional enviat només al webhook. Deixeu-lo buit per no enviar la capçalera d’autenticació.",
     "Firefly Advanced Settings": "Firefly Advanced Settings",
+    "Firefly Concurrency": "Concurrència de Firefly",
+    "Firefly Concurrency Help": "D’una a quatre sol·licituds d’imatge simultànies. Una manté la generació seqüencial; valors superiors poden augmentar la càrrega del servei.",
     "Firefly Image Model": "Firefly Image Model",
     "Firefly Image Model Help": "Text-to-image model requested from the n8n chain. Only models verified under unlimited fair use (0 credits) are listed; other Adobe models may be charged credits.",
     "Firefly Prompt Template": "Firefly Prompt Template",

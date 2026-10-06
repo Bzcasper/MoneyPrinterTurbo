@@ -397,6 +397,8 @@
     "Firefly Webhook Token": "Token Webhook Firefly",
     "Firefly Webhook Token Help": "Token Bearer opsional yang hanya dikirim ke webhook. Kosongkan agar tidak mengirim header autentikasi.",
     "Firefly Advanced Settings": "Firefly Advanced Settings",
+    "Firefly Concurrency": "Konkurensi Firefly",
+    "Firefly Concurrency Help": "Satu hingga empat permintaan gambar bersamaan. Satu mempertahankan generasi berurutan; nilai lebih tinggi dapat meningkatkan beban penyedia.",
     "Firefly Image Model": "Firefly Image Model",
     "Firefly Image Model Help": "Text-to-image model requested from the n8n chain. Only models verified under unlimited fair use (0 credits) are listed; other Adobe models may be charged credits.",
     "Firefly Prompt Template": "Firefly Prompt Template",

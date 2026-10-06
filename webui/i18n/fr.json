@@ -397,6 +397,8 @@
     "Firefly Webhook Token": "Jeton du webhook Firefly",
     "Firefly Webhook Token Help": "Jeton Bearer facultatif envoyé uniquement au webhook. Laissez vide pour ne pas envoyer d’en-tête d’authentification.",
     "Firefly Advanced Settings": "Firefly Advanced Settings",
+    "Firefly Concurrency": "Requêtes simultanées Firefly",
+    "Firefly Concurrency Help": "De une à quatre requêtes d’image simultanées. Une conserve la génération séquentielle ; des valeurs plus élevées peuvent accroître la charge du service.",
     "Firefly Image Model": "Firefly Image Model",
     "Firefly Image Model Help": "Text-to-image model requested from the n8n chain. Only models verified under unlimited fair use (0 credits) are listed; other Adobe models may be charged credits.",
     "Firefly Prompt Template": "Firefly Prompt Template",

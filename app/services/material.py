@@ -1,5 +1,5 @@
 import base64
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import io
 import math
 import os
@@ -2084,6 +2084,108 @@ def generate_images_firefly(
     return [item]
 
 
+def _get_firefly_concurrency() -> int:
+    try:
+        concurrency = int(config.app.get("firefly_concurrency", 1))
+    except (TypeError, ValueError, OverflowError):
+        concurrency = 1
+    return max(1, min(4, concurrency))
+
+
+def _download_videos_firefly_parallel(
+    *,
+    task_id: str,
+    search_terms: list[str],
+    video_aspect: VideoAspect,
+    required_duration: float,
+    max_clip_duration: int,
+    material_directory: str,
+) -> list[str]:
+    """Generate only the needed scenes in waves, retaining script order."""
+    max_clip_duration = max(int(max_clip_duration), 1)
+    stop = threading.Event()
+    results_lock = threading.Lock()
+    results: dict[int, list[tuple[str, float, dict | None]]] = {}
+
+    def ordered_results():
+        with results_lock:
+            clips = [clip for index in sorted(results) for clip in results[index]]
+        return (
+            [clip[0] for clip in clips],
+            [clip[2] for clip in clips if clip[2] is not None],
+            sum(clip[1] for clip in clips),
+        )
+
+    def generate_one(index, search_term):
+        # A failed worker sets the event before the pool can start queued work.
+        if stop.is_set():
+            return
+        try:
+            items = generate_images_firefly(
+                search_term=search_term,
+                minimum_duration=max_clip_duration,
+                video_aspect=video_aspect,
+                save_dir=material_directory,
+            )
+            for item in items:
+                video_file = _render_openai_image_video(item.url, max_clip_duration)
+                if not video_file:
+                    raise OpenAIImagePaidResultError(
+                        "generated image could not be rendered locally"
+                    )
+                record = None
+                try:
+                    record = _material_source_record(item, video_file)
+                except Exception as source_error:
+                    logger.warning(
+                        "failed to prepare generated material source record: "
+                        f"provider=firefly, error={type(source_error).__name__}"
+                    )
+                with results_lock:
+                    results.setdefault(index, []).append(
+                        (video_file, min(max_clip_duration, item.duration), record)
+                    )
+        except Exception:
+            stop.set()
+            raise
+
+    executor = ThreadPoolExecutor(
+        max_workers=_get_firefly_concurrency(), thread_name_prefix="firefly-generation"
+    )
+    futures = []
+    next_index = 0
+    total_duration = 0.0
+    try:
+        while next_index < len(search_terms) and total_duration < required_duration:
+            needed = math.ceil((required_duration - total_duration) / max_clip_duration)
+            end_index = min(next_index + needed, len(search_terms))
+            futures = [
+                executor.submit(
+                    logging_utils.bind_log_scope(generate_one), index, search_terms[index]
+                )
+                for index in range(next_index, end_index)
+            ]
+            for future in as_completed(futures):
+                future.result()
+            next_index = end_index
+            _, _, total_duration = ordered_results()
+    except BaseException:
+        stop.set()
+        for future in futures:
+            future.cancel()
+        # Running HTTP requests cannot be cancelled; never wait for them or buy
+        # another wave after losing an already generated/paid result.
+        executor.shutdown(wait=False, cancel_futures=True)
+        _, material_sources, _ = ordered_results()
+        _persist_material_sources(task_id, material_sources)
+        raise
+    else:
+        executor.shutdown(wait=True)
+
+    video_paths, material_sources, _ = ordered_results()
+    _persist_material_sources(task_id, material_sources)
+    logger.success(f"generated and rendered {len(video_paths)} image materials")
+    return video_paths
 def _download_videos_firefly_on_demand(
     *,
     task_id: str,
@@ -2096,7 +2198,7 @@ def _download_videos_firefly_on_demand(
     """
     按脚本片段顺序逐张生成 Firefly 文生图素材，凑够所需总时长立即停止。
 
-    单张生成耗时数分钟（n8n 工作流内异步轮询），必须逐段生成、覆盖配音
+    单张生成耗时数分钟（n8n 工作流内异步轮询），默认逐段生成、覆盖配音
     时长后立即停止；也不参与 24 小时搜索缓存——产物 URL 是会过期的签名
     地址，且复用缓存会让不同任务反复得到同一张图。
     """
@@ -2111,13 +2213,23 @@ def _download_videos_firefly_on_demand(
         required_duration = float(audio_duration)
     except (TypeError, ValueError):
         required_duration = 0.0
-    if required_duration <= 0:
+    if not math.isfinite(required_duration) or required_duration <= 0:
         logger.warning(
             "skip firefly image generation because required audio duration is "
             f"not positive: duration={audio_duration}"
         )
         _persist_material_sources(task_id, material_sources)
         return video_paths
+
+    if _get_firefly_concurrency() > 1:
+        return _download_videos_firefly_parallel(
+            task_id=task_id,
+            search_terms=search_terms,
+            video_aspect=video_aspect,
+            required_duration=required_duration,
+            max_clip_duration=max_clip_duration,
+            material_directory=material_directory,
+        )
 
     for search_term in search_terms:
         try:
