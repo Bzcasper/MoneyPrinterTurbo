@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 import tempfile
 import unittest
@@ -95,6 +97,33 @@ class TestTaskArtifacts(unittest.TestCase):
         self.assertFalse(updated)
         self.assertEqual(target.read_text(encoding="utf-8"), "{invalid-json")
         self.assertTrue(warning.called)
+
+
+    def test_firefly_manifest_is_bound_to_task_and_rejects_invalid_json(self):
+        key = hashlib.sha256(b"scene|model|64x96").hexdigest()
+        self.assertEqual(task_artifacts.read_firefly_image_manifest("task-one"), {})
+        task_artifacts.record_firefly_image("task-one", key, str(self.task_dir / "image.png"))
+        self.assertEqual(set(task_artifacts.read_firefly_image_manifest("task-one")), {key})
+        self.assertEqual(task_artifacts.read_firefly_image_manifest("task-two"), {})
+        (self.task_dir / "firefly-images.json").write_text("{invalid-json", encoding="utf-8")
+        self.assertEqual(task_artifacts.read_firefly_image_manifest("task-one"), {})
+
+    def test_concurrent_firefly_manifest_updates_preserve_all_saved_images(self):
+        keys = [hashlib.sha256(f"scene-{index}".encode()).hexdigest() for index in range(20)]
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            list(executor.map(lambda key: task_artifacts.record_firefly_image("task-one", key, str(self.task_dir / f"{key}.png")), keys))
+        self.assertEqual(set(task_artifacts.read_firefly_image_manifest("task-one")), set(keys))
+        self.assertEqual(list(self.task_dir.glob(".firefly-images.json.*.tmp")), [])
+
+    def test_failed_firefly_manifest_replace_keeps_previous_cache(self):
+        first_key = hashlib.sha256(b"first scene").hexdigest()
+        second_key = hashlib.sha256(b"second scene").hexdigest()
+        task_artifacts.record_firefly_image("task-one", first_key, str(self.task_dir / "first.png"))
+        with patch.object(task_artifacts.os, "replace", side_effect=OSError("disk failure")):
+            with self.assertRaises(OSError):
+                task_artifacts.record_firefly_image("task-one", second_key, str(self.task_dir / "second.png"))
+        self.assertEqual(set(task_artifacts.read_firefly_image_manifest("task-one")), {first_key})
+        self.assertEqual(list(self.task_dir.glob(".firefly-images.json.*.tmp")), [])
 
 
 if __name__ == "__main__":

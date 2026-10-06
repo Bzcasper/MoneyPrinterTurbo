@@ -1,3 +1,4 @@
+import hashlib
 # -*- coding: utf-8 -*-
 import io
 import os
@@ -561,6 +562,133 @@ class TestFireflyImageProvider(unittest.TestCase):
                 self.assertTrue(download.call_args.kwargs["scene_prompts"])
             else:
                 self.assertNotIn("scene_prompts", download.call_args.kwargs)
+
+
+    def _firefly_cache_task_dir(self, task_id):
+        directory = os.path.join(self.save_dir, "tasks", task_id)
+        os.makedirs(directory, exist_ok=True)
+        return directory
+
+    def _run_cached_firefly(self, task_id, terms=None, duration=5):
+        return material._download_videos_firefly_on_demand(
+            task_id=task_id, search_terms=terms or ["wooden shelf"],
+            video_aspect=material.VideoAspect.portrait, audio_duration=duration,
+            max_clip_duration=5, material_directory=self.save_dir,
+        )
+
+    def test_firefly_retry_reuses_saved_png_without_another_post(self):
+        with (
+            patch.object(material.utils, "task_dir", side_effect=self._firefly_cache_task_dir),
+            patch("app.services.material.requests.post", return_value=_webhook_response({"success": True, "image_url": "https://image.test/result"})) as post,
+            patch("app.services.material.requests.get", return_value=_download_response(_png_bytes())),
+            patch("app.services.material._render_openai_image_video", side_effect=lambda file, duration: file + ".mp4"),
+            patch("app.services.material._persist_material_sources"),
+        ):
+            first = self._run_cached_firefly("retry-task")
+            second = self._run_cached_firefly("retry-task")
+            manifest = material.task_artifacts.read_firefly_image_manifest("retry-task")
+        self.assertEqual(first, second)
+        self.assertEqual(post.call_count, 1)
+        request = post.call_args.kwargs["json"]
+        expected_key = hashlib.sha256(f'{request["prompt"]}|{request["model"]}|{request["width"]}x{request["height"]}'.encode("utf-8")).hexdigest()
+        self.assertEqual(set(manifest), {expected_key})
+        self.assertTrue(os.path.isfile(manifest[expected_key]))
+
+    def test_firefly_cache_is_not_shared_between_tasks(self):
+        with (
+            patch.object(material.utils, "task_dir", side_effect=self._firefly_cache_task_dir),
+            patch("app.services.material.requests.post", return_value=_webhook_response({"success": True, "image_url": "https://image.test/result"})) as post,
+            patch("app.services.material.requests.get", return_value=_download_response(_png_bytes())),
+            patch("app.services.material._render_openai_image_video", side_effect=lambda file, duration: file + ".mp4"),
+            patch("app.services.material._persist_material_sources"),
+        ):
+            first = self._run_cached_firefly("task-one")
+            second = self._run_cached_firefly("task-two")
+        self.assertNotEqual(first, second)
+        self.assertEqual(post.call_count, 2)
+
+    def test_firefly_retry_regenerates_missing_or_corrupt_png(self):
+        for missing in (False, True):
+            task_id = f"invalid-cache-{missing}"
+            with (
+                self.subTest(missing=missing),
+                patch.object(material.utils, "task_dir", side_effect=self._firefly_cache_task_dir),
+                patch("app.services.material.requests.post", return_value=_webhook_response({"success": True, "image_url": "https://image.test/result"})) as post,
+                patch("app.services.material.requests.get", return_value=_download_response(_png_bytes())),
+                patch("app.services.material._render_openai_image_video", side_effect=lambda file, duration: file + ".mp4"),
+                patch("app.services.material._persist_material_sources"),
+            ):
+                first = self._run_cached_firefly(task_id)
+                image_path = next(iter(material.task_artifacts.read_firefly_image_manifest(task_id).values()))
+                if missing:
+                    os.unlink(image_path)
+                else:
+                    with open(image_path, "wb") as image_file:
+                        image_file.write(b"not a PNG")
+                second = self._run_cached_firefly(task_id)
+                cached = next(iter(material.task_artifacts.read_firefly_image_manifest(task_id).values()))
+            self.assertNotEqual(first, second)
+            self.assertNotEqual(image_path, cached)
+            self.assertEqual(post.call_count, 2)
+            self.assertIsNotNone(material._firefly_retry_image(cached))
+
+    def test_firefly_retry_key_changes_with_prompt_model_and_dimensions(self):
+        with (
+            patch.object(material.utils, "task_dir", side_effect=self._firefly_cache_task_dir),
+            patch("app.services.material.requests.post", return_value=_webhook_response({"success": True, "image_url": "https://image.test/result"})) as post,
+            patch("app.services.material.requests.get", return_value=_download_response(_png_bytes())),
+        ):
+            material.generate_images_firefly("shelf", 5, save_dir=self.save_dir, task_id="cache-key")
+            material.generate_images_firefly("shelf", 5, save_dir=self.save_dir, task_id="cache-key")
+            config.app["firefly_image_model"] = "flux-2-pro"
+            material.generate_images_firefly("shelf", 5, save_dir=self.save_dir, task_id="cache-key")
+            material.generate_images_firefly("shelf", 5, video_aspect=material.VideoAspect.landscape, save_dir=self.save_dir, task_id="cache-key")
+            material.generate_images_firefly("different shelf", 5, save_dir=self.save_dir, task_id="cache-key")
+            manifest = material.task_artifacts.read_firefly_image_manifest("cache-key")
+        self.assertEqual(post.call_count, 4)
+        self.assertEqual(len(manifest), 4)
+
+    def test_firefly_first_attempt_does_not_reuse_fresh_png_for_duplicate_terms(self):
+        for concurrency in (1, 2):
+            config.app["firefly_concurrency"] = concurrency
+            with (
+                self.subTest(concurrency=concurrency),
+                patch.object(material.utils, "task_dir", side_effect=self._firefly_cache_task_dir),
+                patch("app.services.material.requests.post", return_value=_webhook_response({"success": True, "image_url": "https://image.test/result"})) as post,
+                patch("app.services.material.requests.get", return_value=_download_response(_png_bytes())),
+                patch("app.services.material._render_openai_image_video", side_effect=lambda file, duration: file + ".mp4"),
+                patch("app.services.material._persist_material_sources"),
+            ):
+                paths = self._run_cached_firefly(f"fresh-duplicates-{concurrency}", ["same term", "same term"], 10)
+            self.assertEqual(post.call_count, 2)
+            self.assertEqual(len(set(paths)), 2)
+
+    def test_firefly_png_is_cached_before_local_render_failure(self):
+        with (
+            patch.object(material.utils, "task_dir", side_effect=self._firefly_cache_task_dir),
+            patch("app.services.material.requests.post", return_value=_webhook_response({"success": True, "image_url": "https://image.test/result"})) as post,
+            patch("app.services.material.requests.get", return_value=_download_response(_png_bytes())),
+            patch("app.services.material._render_openai_image_video", side_effect=[None, "recovered.mp4"]),
+            patch("app.services.material._persist_material_sources"),
+        ):
+            with self.assertRaises(material.OpenAIImagePaidResultError):
+                self._run_cached_firefly("render-retry")
+            self.assertEqual(self._run_cached_firefly("render-retry"), ["recovered.mp4"])
+        self.assertEqual(post.call_count, 1)
+
+    def test_firefly_manifest_write_failure_stops_further_generation(self):
+        with (
+            patch.object(material.utils, "task_dir", side_effect=self._firefly_cache_task_dir),
+            patch("app.services.material.requests.post", return_value=_webhook_response({"success": True, "image_url": "https://image.test/result"})) as post,
+            patch("app.services.material.requests.get", return_value=_download_response(_png_bytes())),
+            patch.object(material.task_artifacts, "record_firefly_image", side_effect=OSError("disk unavailable")),
+            patch("app.services.material._persist_material_sources") as persist,
+        ):
+            with self.assertRaisesRegex(material.OpenAIImagePaidResultError, "manifest could not be persisted"):
+                self._run_cached_firefly("cache-write-error", ["first", "must not generate"], 10)
+        self.assertEqual(post.call_count, 1)
+        persist.assert_called_once_with("cache-write-error", [])
+        self.assertEqual(len([name for name in os.listdir(self.save_dir) if name.endswith(".png")]), 1)
 
 if __name__ == "__main__":
     unittest.main()

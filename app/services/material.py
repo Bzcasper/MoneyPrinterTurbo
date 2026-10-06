@@ -1,5 +1,6 @@
 import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
 import io
 import math
 import os
@@ -1932,7 +1933,7 @@ def _firefly_log_response(body: dict) -> str:
 
 
 def _request_firefly_image(
-    prompt: str, width: int, height: int
+    prompt: str, width: int, height: int, *, model: str = ""
 ) -> tuple[bytes | None, str]:
     """
     经 n8n webhook 提交 Firefly 文生图并下载图片字节。
@@ -1942,7 +1943,7 @@ def _request_firefly_image(
     拿不到产物"，抛错终止任务避免后续关键词继续等待数分钟。
     """
     webhook_url = _firefly_webhook_url()
-    model = _firefly_image_model()
+    model = model or _firefly_image_model()
     token = str(config.app.get("firefly_webhook_token", "") or "").strip()
     request_options = {}
     if token:
@@ -2026,6 +2027,29 @@ def _request_firefly_image(
     return None, failure_detail
 
 
+def _firefly_retry_image(image_path: str) -> tuple[str, int, int] | None:
+    """A cache entry is usable only when its PNG still exists and decodes."""
+    try:
+        if os.path.getsize(image_path) > OPENAI_IMAGE_MAX_BYTES:
+            return None
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(image_path) as image:
+                if image.format != "PNG" or image.width * image.height > OPENAI_IMAGE_MAX_PIXELS:
+                    return None
+                image.load()
+                return image_path, image.width, image.height
+    except (
+        Image.DecompressionBombWarning,
+        Image.DecompressionBombError,
+        UnidentifiedImageError,
+        OSError,
+        SyntaxError,
+        ValueError,
+    ):
+        return None
+
+
 def generate_images_firefly(
     search_term: str,
     minimum_duration: int,
@@ -2033,6 +2057,8 @@ def generate_images_firefly(
     save_dir: str = "",
     *,
     scene_prompt: bool = False,
+    task_id: str = "",
+    retry_images: dict[str, str] | None = None,
 ) -> List[MaterialInfo]:
     """
     用 Firefly 为一个脚本关键词生成一张图片并保存到本地。
@@ -2045,31 +2071,51 @@ def generate_images_firefly(
     clip_duration = max(int(minimum_duration), 1)
     width, height = _firefly_image_size(aspect)
     prompt = search_term if scene_prompt else _firefly_prompt(search_term)
-    logger.info(
-        "generating image via firefly webhook: "
-        f"term={search_term!r}, size={width}x{height}, "
-        f"model={_firefly_image_model()}"
-    )
-    image_bytes, failure_detail = _request_firefly_image(prompt, width, height)
-    if image_bytes is None:
-        logger.error(
-            f"firefly image generation failed: term={search_term!r}, "
-            f"detail={failure_detail}"
+    model = _firefly_image_model()
+    cache_key = hashlib.sha256(f"{prompt}|{model}|{width}x{height}".encode("utf-8")).hexdigest()
+    if task_id and retry_images is None:
+        retry_images = task_artifacts.read_firefly_image_manifest(task_id)
+    cached_path = (retry_images or {}).get(cache_key, "")
+    cached_image = _firefly_retry_image(cached_path) if cached_path else None
+    if cached_image is not None:
+        image_path, img_width, img_height = cached_image
+        logger.info("reusing a valid Firefly PNG from this task's previous attempt")
+    else:
+        logger.info(
+            "generating image via firefly webhook: "
+            f"term={search_term!r}, size={width}x{height}, "
+            f"model={model}"
         )
-        return []
+        request_options = {"model": model} if task_id else {}
+        image_bytes, failure_detail = _request_firefly_image(prompt, width, height, **request_options)
+        if image_bytes is None:
+            logger.error(
+                f"firefly image generation failed: term={search_term!r}, "
+                f"detail={failure_detail}"
+            )
+            return []
 
-    try:
-        image_path, img_width, img_height = _save_openai_image_file(
-            image_bytes, save_dir, filename_prefix="firefly-image"
-        )
-    except _OpenAIImageDecodeError as e:
-        # webhook 返回 200 但 body 不是图片时跳过当前关键词，而不是
-        # 中断整个任务（与 openai_image 同一约定）。
-        logger.error(
-            "firefly image response is not a decodable image, skipping term: "
-            f"term={search_term!r}, error={type(e).__name__}, detail={e}"
-        )
-        return []
+        try:
+            image_path, img_width, img_height = _save_openai_image_file(
+                image_bytes, save_dir, filename_prefix="firefly-image"
+            )
+        except _OpenAIImageDecodeError as e:
+            # webhook 返回 200 但 body 不是图片时跳过当前关键词，而不是
+            # 中断整个任务（与 openai_image 同一约定）。
+            logger.error(
+                "firefly image response is not a decodable image, skipping term: "
+                f"term={search_term!r}, error={type(e).__name__}, detail={e}"
+            )
+            return []
+        if task_id:
+            try:
+                task_artifacts.record_firefly_image(task_id, cache_key, image_path)
+            except Exception as exc:
+                # The PNG is already generated. Stop instead of buying later scenes.
+                raise OpenAIImagePaidResultError(
+                    "generated Firefly image was saved but its retry manifest could not be persisted"
+                ) from exc
+
     item = MaterialInfo()
     item.provider = "firefly"
     item.url = image_path
@@ -2103,9 +2149,12 @@ def _download_videos_firefly_parallel(
     max_clip_duration: int,
     material_directory: str,
     scene_prompts: bool = False,
+    retry_images: dict[str, str] | None = None,
 ) -> list[str]:
     """Generate only the needed scenes in waves, retaining script order."""
     scene_options = {"scene_prompt": True} if scene_prompts else {}
+    if retry_images is None:
+        retry_images = task_artifacts.read_firefly_image_manifest(task_id)
     max_clip_duration = max(int(max_clip_duration), 1)
     stop = threading.Event()
     results_lock = threading.Lock()
@@ -2130,6 +2179,8 @@ def _download_videos_firefly_parallel(
                 minimum_duration=max_clip_duration,
                 video_aspect=video_aspect,
                 save_dir=material_directory,
+                task_id=task_id,
+                retry_images=retry_images,
                 **scene_options,
             )
             for item in items:
@@ -2228,6 +2279,8 @@ def _download_videos_firefly_on_demand(
         _persist_material_sources(task_id, material_sources)
         return video_paths
 
+    # Snapshot at attempt start: fresh images are reused only on a task retry.
+    retry_images = task_artifacts.read_firefly_image_manifest(task_id)
     if _get_firefly_concurrency() > 1:
         return _download_videos_firefly_parallel(
             task_id=task_id,
@@ -2237,6 +2290,7 @@ def _download_videos_firefly_on_demand(
             max_clip_duration=max_clip_duration,
             material_directory=material_directory,
             scene_prompts=scene_prompts,
+            retry_images=retry_images,
         )
 
     for search_term in search_terms:
@@ -2246,6 +2300,8 @@ def _download_videos_firefly_on_demand(
                 minimum_duration=max_clip_duration,
                 video_aspect=video_aspect,
                 save_dir=material_directory,
+                task_id=task_id,
+                retry_images=retry_images,
                 **scene_options,
             )
         except OpenAIImagePaidResultError:
