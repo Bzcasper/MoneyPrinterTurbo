@@ -118,34 +118,65 @@ def patch_script_data(task_id: str, **updates: Any) -> bool:
         )
         return False
 
-def read_firefly_image_manifest(task_id: str) -> dict[str, str]:
-    """Read only this task's saved image paths; never consult another task."""
+def _read_firefly_manifest(task_id: str, media: str) -> dict[str, str]:
+    """Read this task's media paths, including reserved video requests."""
     if not task_id:
         return {}
     with _script_lock(task_id):
-        target = Path(utils.task_dir(task_id)) / "firefly-images.json"
+        target = Path(utils.task_dir(task_id)) / f"firefly-{media}.json"
         try:
             with target.open("r", encoding="utf-8") as manifest_file:
                 payload = json.load(manifest_file)
             if not isinstance(payload, dict) or payload.get("task_id") != task_id:
-                raise ValueError("Firefly image manifest does not belong to this task")
-            images = payload.get("images")
+                raise ValueError("Firefly manifest does not belong to this task")
+            images = payload.get(media)
             if not isinstance(images, dict):
-                raise ValueError("Firefly image manifest must contain an image mapping")
-            return {
+                raise ValueError("Firefly manifest must contain a media mapping")
+            entries = {
                 key: value for key, value in images.items()
                 if isinstance(key, str) and len(key) == 64
                 and all(char in "0123456789abcdef" for char in key)
                 and isinstance(value, str) and value
             }
+            if media == "videos" and len(entries) != len(images):
+                raise ValueError("Firefly video manifest contains an invalid request")
+            return entries
         except FileNotFoundError:
             return {}
         except (OSError, ValueError, TypeError) as exc:
+            if media == "videos":
+                raise ValueError(
+                    "Firefly video retry manifest is unreadable; automatic resubmission is unsafe"
+                ) from None
             logger.warning(
                 "ignoring invalid task Firefly image manifest: "
                 f"task_id={task_id}, error={type(exc).__name__}"
             )
             return {}
+
+
+def read_firefly_image_manifest(task_id: str) -> dict[str, str]:
+    """Read only this task's saved image paths; never consult another task."""
+    return _read_firefly_manifest(task_id, "images")
+
+
+def read_firefly_video_manifest(task_id: str) -> dict[str, str]:
+    return _read_firefly_manifest(task_id, "videos")
+
+
+def reserve_firefly_video(task_id: str, cache_key: str, video_path: str) -> tuple[str, bool]:
+    """Persist intent before a paid POST; an unfinished request cannot be repeated."""
+    if not task_id or len(cache_key) != 64 or any(char not in "0123456789abcdef" for char in cache_key):
+        raise ValueError("a task ID and SHA-256 video key are required")
+    with _script_lock(task_id):
+        videos = read_firefly_video_manifest(task_id)
+        if cache_key in videos:
+            return videos[cache_key], False
+        video_path = str(Path(video_path).resolve())
+        videos[cache_key] = video_path
+        target = Path(utils.task_dir(task_id)) / "firefly-videos.json"
+        _write_json_atomic(target, {"task_id": task_id, "videos": videos})
+        return video_path, True
 
 
 def record_firefly_image(task_id: str, cache_key: str, image_path: str) -> None:
