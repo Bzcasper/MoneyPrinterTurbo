@@ -11,7 +11,7 @@ import uuid
 import warnings
 from pathlib import Path
 from typing import Any, Callable, List
-from urllib.parse import quote_plus, urlencode, urlsplit, urlunsplit
+from urllib.parse import quote, quote_plus, urlencode, urlsplit, urlunsplit
 
 import requests
 from loguru import logger
@@ -229,13 +229,13 @@ def _redact_secret(message: str, secret: str) -> str:
         return safe_message
 
     safe_message = safe_message.replace(secret, "***")
-    encoded_secret = quote_plus(secret)
-    if encoded_secret != secret:
-        safe_message = safe_message.replace(encoded_secret, "***")
+    for encoded_secret in (quote_plus(secret), quote(secret, safe="")):
+        if encoded_secret != secret:
+            safe_message = safe_message.replace(encoded_secret, "***")
     return safe_message
 
 
-def _redact_request_error(error: Exception, *secrets: str) -> str:
+def _redact_request_error(error: Exception | str, *secrets: str) -> str:
     """
     保留网络异常的可排查信息，同时移除 API Key 和代理凭据。
 
@@ -1363,22 +1363,21 @@ def _response_json_safely(response: Any) -> Any:
         return None
 
 
-def _openai_image_response_message(body: Any) -> str:
-    """
-    从 OpenAI 兼容响应中提取可读错误描述。
-
-    标准格式是 ``{"error": {"message": ...}}``，中转服务常退化为
-    ``{"message": ...}`` 或直接给一个字符串。都取不到时返回空串，由调用方
-    决定是否回退到响应正文。
-    """
+def _openai_image_response_message(body: Any, *secrets: str) -> str:
+    """Extract an error message, redacting credentials before truncation."""
     if not isinstance(body, dict):
-        return str(body or "")[:300]
-    error = body.get("error")
-    if isinstance(error, dict):
-        return str(error.get("message") or "")[:300]
-    if error is not None:
-        return str(error)[:300]
-    return str(body.get("message") or "")[:300]
+        message = str(body or "")
+    else:
+        error = body.get("error")
+        if isinstance(error, dict):
+            message = str(error.get("message") or "")
+        elif error is not None:
+            message = str(error)
+        else:
+            message = str(body.get("message") or "")
+    for secret in secrets:
+        message = _redact_secret(message, secret)
+    return message[:300]
 
 
 def _openai_image_http_failure(response: Any, status: int, api_key: str) -> str:
@@ -1944,6 +1943,10 @@ def _request_firefly_image(
     """
     webhook_url = _firefly_webhook_url()
     model = _firefly_image_model()
+    token = str(config.app.get("firefly_webhook_token", "") or "").strip()
+    request_options = {}
+    if token:
+        request_options["headers"] = {"Authorization": f"Bearer {token}"}
     failure_detail = "no request attempt was made"
     for attempt in range(1, FIREFLY_MAX_ATTEMPTS + 1):
         started = time.monotonic()
@@ -1960,47 +1963,55 @@ def _request_firefly_image(
                 proxies=config.proxy,
                 verify=_get_tls_verify(),
                 timeout=FIREFLY_REQUEST_TIMEOUT,
+                **request_options,
             )
         except Exception as e:
             failure_detail = (
                 "firefly webhook request failed: "
                 f"error={type(e).__name__}, "
-                f"detail={_redact_request_error(e, webhook_url)}"
+                f"detail={_redact_request_error(e, webhook_url, token)}"
             )
         else:
             status = int(getattr(response, "status_code", 200) or 200)
             body = _response_json_safely(response)
             elapsed = round(time.monotonic() - started, 1)
             logger.info(
-                "firefly webhook responded: "
-                f"http={status}, elapsed_s={elapsed}, model={model}, "
-                f"{_firefly_log_response(body) or 'no metadata'}"
+                _redact_request_error(
+                    "firefly webhook responded: "
+                    f"http={status}, elapsed_s={elapsed}, model={model}, "
+                    f"{_firefly_log_response(body) or 'no metadata'}",
+                    webhook_url,
+                    token,
+                )
             )
             if status >= 400 or not isinstance(body, dict):
                 failure_detail = (
                     f"firefly webhook HTTP {status}: "
-                    f"{_openai_image_response_message(body)}"
+                    f"{_openai_image_response_message(body, webhook_url, token)}"
                 )
             elif body.get("success") is True and isinstance(body.get("image_url"), str):
                 image_url = body["image_url"]
                 if image_url.startswith(("http://", "https://")):
                     # presigned 地址无需鉴权；api_key 参数只用于错误脱敏。
                     image_bytes, download_detail = _openai_image_download_bytes(
-                        image_url, ""
+                        image_url, token
                     )
                     if image_bytes is None:
                         return None, download_detail
                     logger.info(
-                        "firefly image ready: "
-                        f"model={model}, bytes={len(image_bytes)}, "
-                        f"elapsed_s={elapsed}"
+                        _redact_request_error(
+                            "firefly image ready: "
+                            f"model={model}, bytes={len(image_bytes)}, "
+                            f"elapsed_s={elapsed}",
+                            token,
+                        )
                     )
                     return image_bytes, ""
                 failure_detail = "firefly response image_url is not an http URL"
             else:
                 failure_detail = (
                     "firefly generation reported failure: "
-                    f"{_openai_image_response_message(body)}"
+                    f"{_openai_image_response_message(body, webhook_url, token)}"
                 )
         if attempt < FIREFLY_MAX_ATTEMPTS:
             logger.warning(

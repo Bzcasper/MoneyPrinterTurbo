@@ -4074,6 +4074,17 @@ def _render_settings_dialog():
                     "app", "firefly_webhook_url", firefly_webhook_url.strip()
                 )
 
+                firefly_webhook_token = st.text_input(
+                    tr("Firefly Webhook Token"),
+                    value=str(config.app.get("firefly_webhook_token", "") or ""),
+                    type="password",
+                    help=tr("Firefly Webhook Token Help"),
+                    key="firefly_webhook_token_input",
+                )
+                _set_runtime_config(
+                    "app", "firefly_webhook_token", firefly_webhook_token.strip()
+                )
+
                 with st.expander(tr("Firefly Advanced Settings"), expanded=False):
                     firefly_image_model = st.selectbox(
                         tr("Firefly Image Model"),
