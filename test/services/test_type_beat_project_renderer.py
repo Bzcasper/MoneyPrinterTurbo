@@ -23,6 +23,43 @@ def _touch(path: Path, data: bytes = b"fixture") -> str:
     return str(path)
 
 
+def test_psql_rows_uses_remote_database_host(monkeypatch):
+    monkeypatch.setenv("MUSIC_INTEL_REMOTE_HOST", "bobby-nuc")
+    with patch.object(renderer.subprocess, "check_output", return_value="one|two\n") as check:
+        rows = renderer.psql_rows("select 1;")
+    assert rows == [["one", "two"]]
+    command = check.call_args.args[0]
+    assert command[:6] == [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "bobby-nuc"
+    ]
+    assert "docker exec ai-postgres psql" in command[-1]
+    assert "select 1;" in command[-1]
+
+
+def test_materialize_remote_path_caches_media(tmp_path, monkeypatch):
+    monkeypatch.setenv("TYPEBEAT_REMOTE_MEDIA_HOST", "bobby-nuc")
+    monkeypatch.setenv("TYPEBEAT_REMOTE_CACHE_ROOT", str(tmp_path / "cache"))
+
+    def fake_run(command, **_kwargs):
+        Path(command[-1]).write_bytes(b"remote-media")
+        return SimpleNamespace(returncode=0)
+
+    with patch.object(renderer.subprocess, "run", side_effect=fake_run) as run:
+        local = renderer._materialize_remote_path(
+            "/srv/data/n8n-media/store/strictlybeats/example.mp4",
+            "project-1",
+            "scene-001-locked_video",
+        )
+    assert Path(local).is_file()
+    assert Path(local).read_bytes() == b"remote-media"
+    assert str(tmp_path / "cache" / "project-1") in local
+    command = run.call_args.args[0]
+    assert command[:6] == [
+        "scp", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10"
+    ]
+    assert command[6].startswith("bobby-nuc:/srv/data/n8n-media/")
+
+
 def test_load_project_preserves_one_mixed_asset_per_scene(tmp_path):
     audio = _touch(tmp_path / "beat.wav")
     image = _touch(tmp_path / "scene-1.png")
