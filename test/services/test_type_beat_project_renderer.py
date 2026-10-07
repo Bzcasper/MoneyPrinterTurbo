@@ -164,3 +164,20 @@ def test_renderer_cli_bootstraps_repo_root(tmp_path):
     )
     assert result.returncode == 0
     assert "StrictlyBeats type-beat" in result.stdout
+
+
+def _shape_project(scene_count: int, motion_count: int):
+    return {
+        "scenes": [
+            {"asset_type": "video" if index < motion_count else "image"}
+            for index in range(scene_count)
+        ]
+    }
+
+
+def test_production_shape_requires_30_to_50_scenes_and_exactly_10_motion():
+    renderer.validate_production_shape(_shape_project(33, 10))
+    with pytest.raises(SystemExit, match="30-50 scenes"):
+        renderer.validate_production_shape(_shape_project(29, 10))
+    with pytest.raises(SystemExit, match="exactly 10 motion scenes"):
+        renderer.validate_production_shape(_shape_project(33, 9))
