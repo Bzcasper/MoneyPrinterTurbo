@@ -226,7 +226,11 @@ def test_hero_estimate_includes_possible_filler_without_requesting_a_video(contr
     get.assert_not_called()
 
 
-def test_hero_setting_is_optional_persists_and_does_not_generate_on_rerun():
+def test_hero_setting_is_optional_persists_and_does_not_generate_on_rerun(monkeypatch):
+    # Isolate the test from a real operator preference persisted in config.toml.
+    # The first-run default is false, while a prior WebUI session may legitimately
+    # have saved true; either state must not make the test suite nondeterministic.
+    monkeypatch.setitem(config.ui, "firefly_hero_shot", False)
     response = _webhook_response({"success": True, "image_url": "https://cdn.example/test.png"})
     with patch.object(material.requests, "post", return_value=response) as post, patch.object(material.requests, "get", return_value=_download_response(_png_bytes())) as get:
         with _running_app(_GroupedSelectHarness()) as app:
