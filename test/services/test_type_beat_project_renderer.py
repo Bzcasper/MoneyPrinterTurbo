@@ -222,6 +222,29 @@ def test_fast_render_normalizes_once_then_stream_copies_concat_and_mux(tmp_path)
     generic_generate.assert_not_called()
 
 
+def test_api_assemble_project_invokes_moneyprinter_assembler(tmp_path, monkeypatch):
+    monkeypatch.setattr(video_controller.config, "root_dir", str(tmp_path))
+    (tmp_path / "scripts").mkdir(parents=True)
+    (tmp_path / "storage" / "temp").mkdir(parents=True)
+    (tmp_path / "scripts" / "assemble_typebeat_project.py").write_text("# fixture", encoding="utf-8")
+    response_payload = {"ok": True, "project_id": "project-free", "motion_scene_count": 10}
+
+    def fake_run(command, **_kwargs):
+        assert command[1].endswith("assemble_typebeat_project.py")
+        assert command[2] == "--payload"
+        payload = Path(command[3])
+        assert payload.is_file()
+        return SimpleNamespace(returncode=0, stdout=__import__("json").dumps(response_payload) + "\n", stderr="")
+
+    request = SimpleNamespace(headers={})
+    with patch.object(video_controller.subprocess, "run", side_effect=fake_run):
+        result = video_controller.assemble_type_beat_project(
+            request,
+            {"clip_id": "00000000-0000-0000-0000-000000000000", "motion_assets": [{}] * 10},
+        )
+    assert result["data"]["project_id"] == "project-free"
+
+
 def test_api_project_render_honors_configurable_output_root(tmp_path, monkeypatch):
     monkeypatch.setenv("TYPEBEAT_OUTPUT_ROOT", str(tmp_path))
     expected = tmp_path / "project-1" / "final" / "moneyprinterturbo-master.mp4"
