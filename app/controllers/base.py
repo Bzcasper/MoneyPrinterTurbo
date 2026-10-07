@@ -1,3 +1,5 @@
+import ipaddress
+import os
 import secrets
 from typing import Annotated
 from uuid import uuid4
@@ -44,6 +46,40 @@ def get_api_key_values(request: Request) -> list[str]:
     return [api_key] if isinstance(api_key, str) else []
 
 
+def _trusted_internal_typebeat_request(request: Request) -> bool:
+    """Allow only explicitly trusted peers onto the narrow internal type-beat API."""
+
+    url = getattr(request, "url", "")
+    path = getattr(url, "path", None) or str(url)
+    if not path.startswith("/api/v1/internal/type-beat/"):
+        return False
+
+    raw_allowed = os.environ.get(
+        "TYPEBEAT_TRUSTED_N8N_IPS", "127.0.0.1,::1"
+    )
+    allowed = [item.strip() for item in raw_allowed.split(",") if item.strip()]
+    client = getattr(request, "client", None)
+    peer = getattr(client, "host", "") if client is not None else ""
+    if not peer:
+        return False
+
+    try:
+        peer_ip = ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+
+    for item in allowed:
+        try:
+            if "/" in item:
+                if peer_ip in ipaddress.ip_network(item, strict=False):
+                    return True
+            elif peer_ip == ipaddress.ip_address(item):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def verify_token(
     request: Request,
     x_api_key: Annotated[str | None, Header(alias="x-api-key")] = None,
@@ -54,6 +90,9 @@ def verify_token(
     路由和任务产物下载都会要求客户端通过 ``x-api-key`` 请求头提供同一
     个值。参数声明同时让 Swagger 展示该请求头，便于受保护环境调试。
     """
+
+    if _trusted_internal_typebeat_request(request):
+        return None
 
     configured_key = config.app.get("api_key", "")
     if configured_key in (None, ""):

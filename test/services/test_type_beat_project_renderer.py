@@ -245,6 +245,31 @@ def test_api_assemble_project_invokes_moneyprinter_assembler(tmp_path, monkeypat
     assert result["data"]["project_id"] == "project-free"
 
 
+def test_internal_sync_render_uses_configured_output_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("TYPEBEAT_OUTPUT_ROOT", str(tmp_path))
+    monkeypatch.setattr(video_controller.config, "root_dir", str(tmp_path))
+    (tmp_path / "scripts").mkdir(parents=True)
+    (tmp_path / "scripts" / "render_typebeat_project.py").write_text("# fixture", encoding="utf-8")
+    expected = tmp_path / "project-free" / "final" / "moneyprinterturbo-master.mp4"
+
+    def fake_run(command, **_kwargs):
+        expected.parent.mkdir(parents=True, exist_ok=True)
+        expected.write_bytes(b"video")
+        expected.with_suffix(".manifest.json").write_text("{}", encoding="utf-8")
+        assert command[-2:] == ["--output", str(expected)]
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    request = SimpleNamespace(headers={})
+    with patch.object(video_controller.subprocess, "run", side_effect=fake_run):
+        result = video_controller.render_type_beat_project_internal_sync(
+            request, "project-free"
+        )
+
+    assert result["data"]["project_id"] == "project-free"
+    assert result["data"]["output_path"] == str(expected)
+    assert result["data"]["render_engine"] == "moneyprinterturbo-type-beat"
+
+
 def test_api_project_render_honors_configurable_output_root(tmp_path, monkeypatch):
     monkeypatch.setenv("TYPEBEAT_OUTPUT_ROOT", str(tmp_path))
     expected = tmp_path / "project-1" / "final" / "moneyprinterturbo-master.mp4"

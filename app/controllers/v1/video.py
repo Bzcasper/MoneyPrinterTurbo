@@ -405,6 +405,83 @@ def assemble_type_beat_project(request: Request, body: dict):
 
 
 @router.post(
+    "/internal/type-beat/projects/assemble",
+    summary="Trusted-LAN type-beat project assembly",
+)
+def assemble_type_beat_project_internal(request: Request, body: dict):
+    return assemble_type_beat_project(request, body)
+
+
+@router.post(
+    "/internal/type-beat/projects/{project_id}/render-sync",
+    summary="Trusted-LAN synchronous type-beat render",
+)
+def render_type_beat_project_internal_sync(
+    request: Request,
+    project_id: str = Path(..., description="Canonical media-video project ID"),
+):
+    request_id = base.get_task_id(request)
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", project_id):
+        raise HttpException(
+            task_id=request_id,
+            status_code=400,
+            message=f"{request_id}: invalid project id",
+        )
+
+    root = pathlib.Path(config.root_dir)
+    script = root / "scripts" / "render_typebeat_project.py"
+    output_root = pathlib.Path(
+        os.environ.get("TYPEBEAT_OUTPUT_ROOT", "/srv/data/n8n-media/store/strictlybeats")
+    )
+    output = output_root / project_id / "final" / "moneyprinterturbo-master.mp4"
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root)
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script), project_id, "--output", str(output)],
+            cwd=str(root),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=7200,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HttpException(
+            task_id=request_id,
+            status_code=504,
+            message=f"{request_id}: type-beat render exceeded 7200 seconds",
+        ) from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HttpException(
+            task_id=request_id,
+            status_code=500,
+            message=f"{request_id}: type-beat render failed: {exc}",
+        ) from exc
+
+    if result.returncode != 0 or not output.is_file():
+        detail = (result.stderr or result.stdout or "type-beat render failed").strip()[-4000:]
+        raise HttpException(
+            task_id=request_id,
+            status_code=422,
+            message=f"{request_id}: {detail}",
+        )
+
+    manifest = output.with_suffix(".manifest.json")
+    return utils.get_response(
+        200,
+        {
+            "project_id": project_id,
+            "output_path": str(output),
+            "manifest_path": str(manifest),
+            "render_engine": "moneyprinterturbo-type-beat",
+            "render_mode": os.environ.get("TYPEBEAT_RENDER_MODE", "fast"),
+        },
+    )
+
+
+@router.post(
     "/type-beat/projects/{project_id}/render",
     response_model=TaskResponse,
     summary="Render a canonical type-beat project",

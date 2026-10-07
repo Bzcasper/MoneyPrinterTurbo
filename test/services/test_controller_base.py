@@ -20,10 +20,11 @@ class TestControllerAuthentication(unittest.TestCase):
         config.app.update(self.original_app_config)
 
     @staticmethod
-    def _request(headers=None):
+    def _request(headers=None, url="http://localhost/api/v1/tasks", client_host="127.0.0.1"):
         return SimpleNamespace(
             headers=headers or {},
-            url="http://localhost/api/v1/tasks",
+            url=SimpleNamespace(path=url.split("http://localhost", 1)[-1] if url.startswith("http://localhost") else url),
+            client=SimpleNamespace(host=client_host),
         )
 
     def test_normalize_task_id_preserves_printable_values_up_to_limit(self):
@@ -97,6 +98,41 @@ class TestControllerAuthentication(unittest.TestCase):
         self.assertIn(str(self.generated_task_id), logged_warning)
         self.assertNotIn(malicious_task_id, logged_warning)
         self.assertNotIn("forged-log-entry", logged_warning)
+
+    def test_verify_token_allows_trusted_nuc_only_for_internal_typebeat(self):
+        config.app["api_key"] = "secret"
+        with patch.dict(
+            "os.environ",
+            {"TYPEBEAT_TRUSTED_N8N_IPS": "10.0.0.242,127.0.0.1,::1"},
+            clear=False,
+        ):
+            self.assertIsNone(
+                base.verify_token(
+                    self._request(
+                        url="/api/v1/internal/type-beat/projects/assemble",
+                        client_host="10.0.0.242",
+                    )
+                )
+            )
+
+            with self.assertRaises(HttpException) as public_request:
+                base.verify_token(
+                    self._request(
+                        url="/api/v1/type-beat/projects/example/render",
+                        client_host="10.0.0.242",
+                    )
+                )
+            self.assertEqual(public_request.exception.status_code, 401)
+
+            with self.assertRaises(HttpException) as untrusted_peer:
+                base.verify_token(
+                    self._request(
+                        url="/api/v1/internal/type-beat/projects/assemble",
+                        client_host="10.0.0.99",
+                    )
+                )
+            self.assertEqual(untrusted_peer.exception.status_code, 401)
+
 
     def test_verify_token_accepts_matching_key(self):
         """配置了 API Key 时，相同请求头必须正常通过鉴权。"""
