@@ -15,7 +15,7 @@ if ! flock -n 9; then
 fi
 
 while true; do
-  if curl -fsS --max-time 3 http://127.0.0.1:8088/openapi.json >/dev/null 2>&1; then
+  if curl -fsS --max-time 3 http://10.0.0.242:8088/openapi.json >/dev/null 2>&1; then
     sleep 30
     continue
   fi
