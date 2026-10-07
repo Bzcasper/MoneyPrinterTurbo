@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import math
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -33,13 +35,76 @@ _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 _VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 
 
+def _remote_db_host() -> str:
+    return os.environ.get("MUSIC_INTEL_REMOTE_HOST", "").strip()
+
+
+def _remote_media_host() -> str:
+    return os.environ.get("TYPEBEAT_REMOTE_MEDIA_HOST", _remote_db_host()).strip()
+
+
+def _remote_cache_root() -> Path:
+    return Path(
+        os.environ.get(
+            "TYPEBEAT_REMOTE_CACHE_ROOT",
+            str(Path.home() / ".cache" / "moneyprinterturbo" / "typebeat-remote"),
+        )
+    )
+
+
 def psql_rows(sql: str) -> list[list[str]]:
     cmd = [
         "docker", "exec", DB_CONTAINER, "psql", "-U", DB_USER, "-d", DB_NAME,
         "-At", "-F", "|", "-c", sql,
     ]
-    raw = subprocess.check_output(cmd, text=True)
+    remote_host = _remote_db_host()
+    if remote_host:
+        cmd = [
+            "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+            remote_host, shlex.join(cmd),
+        ]
+    raw = subprocess.check_output(cmd, text=True, timeout=60)
     return [line.split("|") for line in raw.splitlines() if line.strip()]
+
+
+def _materialize_remote_path(source: str, project_id: str, label: str) -> str:
+    source = str(source or "").strip()
+    if not source:
+        return source
+    path = Path(source)
+    if path.is_file():
+        return str(path)
+    remote_host = _remote_media_host()
+    if not remote_host:
+        return source
+
+    safe_project = re.sub(r"[^A-Za-z0-9._-]+", "_", project_id)[:128] or "project"
+    safe_label = re.sub(r"[^A-Za-z0-9._-]+", "_", label)[:96] or "asset"
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
+    suffix = path.suffix.lower()
+    target_dir = _remote_cache_root() / safe_project
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{safe_label}-{digest}{suffix}"
+    if target.is_file() and target.stat().st_size > 0:
+        return str(target)
+
+    tmp = target.with_name(target.name + f".tmp-{os.getpid()}")
+    try:
+        subprocess.run(
+            [
+                "scp", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+                f"{remote_host}:{source}", str(tmp),
+            ],
+            check=True,
+            timeout=900,
+        )
+        if not tmp.is_file() or tmp.stat().st_size <= 0:
+            raise OSError(f"empty remote media copy: {source}")
+        os.replace(tmp, target)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+    return str(target)
 
 
 def _asset_type(asset_type: str, path: str) -> str:
@@ -121,6 +186,10 @@ def load_project(project_id: str) -> dict:
     if not project:
         raise SystemExit(f"project not found or source media unavailable: {project_id}")
     source_clip_id, title, audio_path, source_kind = project[0]
+    try:
+        audio_path = _materialize_remote_path(audio_path, project_id, "source-audio")
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise SystemExit(f"failed to materialize source audio for {project_id}: {exc}") from exc
 
     rows = psql_rows(
         f"select s.ordinal,s.start_seconds,s.end_seconds,"
@@ -143,14 +212,25 @@ def load_project(project_id: str) -> dict:
             (row[5], row[6], "anchor"),
             (row[7], row[8], "fallback"),
         )
-        selected = next(
-            ((asset_type, asset_path, role) for asset_type, asset_path, role in candidates
-             if asset_path and Path(asset_path).is_file()),
-            None,
-        )
+        selected = None
+        errors: list[str] = []
+        for asset_type, candidate_path, role in candidates:
+            if not candidate_path:
+                continue
+            try:
+                local_path = _materialize_remote_path(
+                    candidate_path, project_id, f"scene-{int(ordinal):03d}-{role}"
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
+                errors.append(f"{role}: {exc}")
+                continue
+            if local_path and Path(local_path).is_file():
+                selected = (asset_type, local_path, role)
+                break
         if not selected:
+            detail = f" ({'; '.join(errors)})" if errors else ""
             raise SystemExit(
-                f"no local canonical asset found for project {project_id} scene {ordinal}"
+                f"no local canonical asset found for project {project_id} scene {ordinal}{detail}"
             )
         asset_type, asset_path, asset_role = selected
         scenes.append({
