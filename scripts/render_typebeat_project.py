@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -22,6 +24,8 @@ def psql_rows(sql: str) -> list[list[str]]:
 
 
 def load_project(project_id: str) -> dict:
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", project_id):
+        raise SystemExit("invalid project id")
     pid = project_id.replace("'", "''")
     project = psql_rows(
         f"select p.source_clip_id,p.title,m.canonical_source_path,m.canonical_source_kind "
@@ -156,7 +160,14 @@ def main() -> None:
         print(json.dumps(plan, indent=2))
         return
 
-    result = render_project(project, output, threads=max(1, args.threads))
+    lock_path = output.with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("w") as lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise SystemExit(f"render already in progress: {project['project_id']}") from exc
+        result = render_project(project, output, threads=max(1, args.threads))
     print(json.dumps(result, indent=2))
 
 

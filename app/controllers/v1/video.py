@@ -1,7 +1,10 @@
 import mimetypes
 import os
 import pathlib
+import re
 import shutil
+import subprocess
+import sys
 from typing import Union
 from urllib.parse import quote
 
@@ -17,6 +20,7 @@ from app.controllers.manager.base_manager import TaskQueueFullError
 from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.controllers.manager.redis_manager import RedisTaskManager
 from app.controllers.v1.base import new_router
+from app.models import const
 from app.models.exception import HttpException
 from app.models.schema import (
     AudioRequest,
@@ -29,8 +33,8 @@ from app.models.schema import (
     TaskQueryResponse,
     TaskResponse,
     TaskVideoRequest,
+    VideoMaterialRetrieveResponse,
     VideoMaterialUploadResponse,
-    VideoMaterialRetrieveResponse
 )
 from app.services import bgm as bgm_service
 from app.services import material_upload as material_upload_service
@@ -272,6 +276,93 @@ def create_task(
         raise HttpException(
             task_id=task_id, status_code=400, message=f"{request_id}: {str(e)}"
         )
+
+
+def _run_type_beat_project_render(task_id: str, project_id: str) -> None:
+    root = pathlib.Path(config.root_dir)
+    script = root / "scripts" / "render_typebeat_project.py"
+    output = pathlib.Path("/srv/data/n8n-media/store/strictlybeats") / project_id / "final" / "moneyprinterturbo-master.mp4"
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root)
+    sm.state.patch_task(task_id, progress=5, project_id=project_id, output_path=str(output))
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script), project_id, "--output", str(output)],
+            cwd=str(root),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=7200,
+            check=False,
+        )
+        if result.returncode != 0 or not output.is_file():
+            detail = (result.stderr or result.stdout or "type-beat render failed").strip()[-4000:]
+            sm.state.patch_task(
+                task_id,
+                state=const.TASK_STATE_FAILED,
+                progress=100,
+                failed_stage="type_beat_render",
+                error=detail,
+            )
+            return
+        sm.state.patch_task(
+            task_id,
+            state=const.TASK_STATE_COMPLETE,
+            progress=100,
+            videos=[str(output)],
+            output_path=str(output),
+            manifest_path=str(output.with_suffix(".manifest.json")),
+            render_engine="moneyprinterturbo-type-beat",
+        )
+    except subprocess.TimeoutExpired:
+        sm.state.patch_task(
+            task_id,
+            state=const.TASK_STATE_FAILED,
+            progress=100,
+            failed_stage="type_beat_render",
+            error="type-beat render exceeded 7200 seconds",
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.exception(
+            f"type-beat project render failed: task_id={task_id}, project_id={project_id}"
+        )
+        sm.state.patch_task(
+            task_id,
+            state=const.TASK_STATE_FAILED,
+            progress=100,
+            failed_stage="type_beat_render",
+            error=str(exc),
+        )
+
+
+@router.post(
+    "/type-beat/projects/{project_id}/render",
+    response_model=TaskResponse,
+    summary="Render a canonical type-beat project",
+)
+def render_type_beat_project(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    project_id: str = Path(..., description="Canonical media-video project ID"),
+):
+    request_id = base.get_task_id(request)
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", project_id):
+        raise HttpException(
+            task_id=request_id,
+            status_code=400,
+            message=f"{request_id}: invalid project id",
+        )
+    task_id = utils.get_uuid()
+    sm.state.update_task(
+        task_id,
+        state=const.TASK_STATE_PROCESSING,
+        progress=0,
+        task_type="type_beat_project_render",
+        project_id=project_id,
+    )
+    background_tasks.add_task(_run_type_beat_project_render, task_id, project_id)
+    return utils.get_response(200, {"task_id": task_id})
+
 
 @router.get("/tasks", response_model=TaskListResponse, summary="Get all tasks")
 def get_all_tasks(
