@@ -69,26 +69,34 @@ class TestContentVerticals(unittest.TestCase):
 
 
     def test_scene_prompts_have_required_style_and_visual_constraints(self):
-        for key, suffix in (
-            ("diy", "photorealistic, natural window light, clean wooden workbench, shallow depth of field, 4k"),
-            ("type_beat", "dark noir, cinematic, 35mm film grain, low-key lighting, deep shadows, teal and crimson neon accents"),
-        ):
-            prompt = verticals.get_vertical(key)["terms_prompt"]
-            self.assertIn("{amount}", prompt)
-            self.assertIn("twenty to thirty-five", prompt)
-            self.assertIn("readable text", prompt)
-            self.assertIn("faces", prompt)
-            self.assertTrue(prompt.endswith(suffix))
+        diy_prompt = verticals.get_vertical("diy")["terms_prompt"]
+        self.assertIn("{amount}", diy_prompt)
+        self.assertIn("twenty to thirty-five", diy_prompt)
+        self.assertIn("readable text", diy_prompt)
+        self.assertIn("faces", diy_prompt)
+        self.assertTrue(diy_prompt.endswith(
+            "photorealistic, natural window light, clean wooden workbench, shallow depth of field, 4k"
+        ))
+
+        beat_prompt = verticals.get_vertical("type_beat")["terms_prompt"]
+        self.assertIn("{amount}", beat_prompt)
+        self.assertIn("one continuous vibrant abstract film", beat_prompt)
+        self.assertIn("no people, faces, bodies, silhouettes", beat_prompt)
+        self.assertIn("readable text", beat_prompt)
+        self.assertTrue(beat_prompt.endswith(
+            "vibrant abstract cinematic masterpiece, saturated spectral light, reflective materials, volumetric atmosphere, deep spatial layers, premium 16:9 composition, no people"
+        ))
         self.assertIn("first scene shows the finished project", verticals.DIY_TERMS_PROMPT)
         self.assertIn("last shows the finished project in use", verticals.DIY_TERMS_PROMPT)
         self.assertEqual(verticals.get_vertical("jewelry")["terms_prompt"], "")
 
-    def test_diy_script_prompt_is_tts_safe_and_type_beat_has_lease_line(self):
+    def test_diy_script_prompt_is_tts_safe_and_type_beat_is_visual_only(self):
         self.assertIn("numbers and units as words", verticals.DIY_SCRIPT_PROMPT)
         self.assertIn("one simple step per paragraph", verticals.DIY_SCRIPT_PROMPT)
         self.assertIn("sentence under twenty words", verticals.DIY_SCRIPT_PROMPT)
-        self.assertIn("lease the beat via the link in the description", verticals.TYPE_BEAT_SCRIPT_PROMPT)
-        self.assertIn("quoted lyrics", verticals.TYPE_BEAT_SCRIPT_PROMPT)
+        self.assertIn("one continuous abstract cinematic world", verticals.TYPE_BEAT_SCRIPT_PROMPT)
+        self.assertIn("no narrator dialogue", verticals.TYPE_BEAT_SCRIPT_PROMPT)
+        self.assertIn("silhouettes", verticals.TYPE_BEAT_SCRIPT_PROMPT)
 
 
 if __name__ == "__main__":
