@@ -1,3 +1,4 @@
+import json
 import mimetypes
 import os
 import pathlib
@@ -5,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import Union
 from urllib.parse import quote
 
@@ -336,6 +338,70 @@ def _run_type_beat_project_render(task_id: str, project_id: str) -> None:
             failed_stage="type_beat_render",
             error=str(exc),
         )
+
+
+@router.post(
+    "/type-beat/projects/assemble",
+    summary="Assemble a canonical type-beat project from 10 free motion clips",
+)
+def assemble_type_beat_project(request: Request, body: dict):
+    request_id = base.get_task_id(request)
+    root = pathlib.Path(config.root_dir)
+    script = root / "scripts" / "assemble_typebeat_project.py"
+    if not isinstance(body, dict):
+        raise HttpException(
+            task_id=request_id,
+            status_code=400,
+            message=f"{request_id}: JSON object body required",
+        )
+    payload_file = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".json",
+            prefix="mpt-typebeat-assemble-",
+            dir=str(root / "storage" / "temp"),
+            delete=False,
+        ) as handle:
+            json.dump(body, handle)
+            payload_file = pathlib.Path(handle.name)
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(root)
+        result = subprocess.run(
+            [sys.executable, str(script), "--payload", str(payload_file)],
+            cwd=str(root),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=1200,
+            check=False,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "type-beat assembly failed").strip()[-4000:]
+            raise HttpException(
+                task_id=request_id,
+                status_code=422,
+                message=f"{request_id}: {detail}",
+            )
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        payload = json.loads(lines[-1]) if lines else {}
+        return utils.get_response(200, payload)
+    except json.JSONDecodeError as exc:
+        raise HttpException(
+            task_id=request_id,
+            status_code=500,
+            message=f"{request_id}: invalid assembly response: {exc}",
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HttpException(
+            task_id=request_id,
+            status_code=504,
+            message=f"{request_id}: type-beat assembly exceeded 1200 seconds",
+        ) from exc
+    finally:
+        if payload_file is not None:
+            payload_file.unlink(missing_ok=True)
 
 
 @router.post(
