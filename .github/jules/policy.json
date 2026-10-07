@@ -1,0 +1,54 @@
+{
+  "repository": "Bzcasper/MoneyPrinterTurbo",
+  "base_branch": "main",
+  "state_branch": "codex/jules-autopilot-state",
+  "state_path": "state.json",
+  "daily_limit": 15,
+  "max_concurrent": 3,
+  "cooldown_days": 30,
+  "categories": ["hardening", "stability", "enhancement", "performance", "tests"],
+  "required_checks": [
+    "Python 3.11 tests",
+    "Python 3.13 tests",
+    "Windows smoke tests"
+  ],
+  "max_changed_files": 12,
+  "max_diff_lines": 800,
+  "tasks_manifest": "docs/JULES_TASKS.json",
+  "scope_roots": ["app", "webui", "cli.py"],
+  "protected_paths": [
+    ".github/**",
+    "tools/**",
+    "test/tools/**",
+    "test/conftest.py",
+    "docs/JULES*",
+    "AGENTS.md",
+    "**/AGENTS.md",
+    ".agents/**",
+    ".codex/**",
+    ".env*",
+    "**/.env*",
+    "config*.toml",
+    "Dockerfile*",
+    "docker-compose*.yml",
+    "compose*.yml",
+    "uv.lock",
+    "pyproject.toml",
+    "requirements*.txt",
+    "scripts/**",
+    "supabase/**",
+    "vercel.json",
+    ".vercel/**"
+  ],
+  "mcp": {
+    "connected": ["Linear", "Stitch", "Supabase", "Tinybird", "Context7", "v0"],
+    "usage": {
+      "Linear": "Read authorized issues for this repository as task context. Verify claims against code and deduplicate against session history. Do not create, assign, comment on or message issues without explicit task authorization.",
+      "Stitch": "Use relevant existing UI designs to improve accessibility, loading and error states in the current Streamlit interface. Translate design intent to the existing stack; do not scaffold a replacement application or publish designs.",
+      "Supabase": "Use only the connected project, read-only schema, migration metadata and advisors. Do not query personal rows, mutate production, run migrations or copy secrets. Develop any proposed integration with isolated synthetic fixtures; database writes require an explicitly authorized development branch.",
+      "Tinybird": "Read scoped endpoint and data-source metadata for telemetry design. Use synthetic events and mocked contracts in repository tests. Do not ingest production data, create paid resources or execute unrestricted queries.",
+      "Context7": "Resolve official library documentation and request bounded snippets for the exact versions pinned by uv.lock. Verify SDK signatures, timeout, retry and compatibility behavior before changing provider integrations.",
+      "v0": "Use relevant previews or UI ideas for small improvements to the existing Streamlit/FastAPI product. Do not replace the stack, create a separate React application, publish projects or assume a v0 connection grants Vercel deployment access."
+    }
+  }
+}

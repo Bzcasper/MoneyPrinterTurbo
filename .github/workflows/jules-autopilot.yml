@@ -1,0 +1,74 @@
+name: Jules autopilot
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Inspect quota, candidates and PR gates without changing external state
+        type: boolean
+        required: true
+        default: true
+
+concurrency:
+  group: jules-autopilot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  actions: read
+  statuses: read
+
+jobs:
+  controller:
+    if: >-
+      (vars.JULES_AUTOPILOT_ENABLED == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.dry_run)) &&
+      github.repository == 'Bzcasper/MoneyPrinterTurbo' &&
+      (github.event_name != 'workflow_run' ||
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+      GITHUB_TOKEN: ${{ secrets.JULES_GITHUB_TOKEN || github.token }}
+      JULES_MUTATION_TOKEN_PRESENT: ${{ secrets.JULES_GITHUB_TOKEN != '' }}
+      JULES_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      # workflow_run has write credentials: never check out the triggering PR,
+      # execute its code, or download its artifacts in this workflow.
+      - name: Check out trusted main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Verify controller credentials
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+
+          if not os.environ.get("JULES_API_KEY"):
+              sys.exit("Missing repository secret JULES_API_KEY.")
+          if (
+              os.environ.get("JULES_DRY_RUN") != "true"
+              and os.environ.get("JULES_MUTATION_TOKEN_PRESENT") != "true"
+          ):
+              sys.exit("Live automation requires repository secret JULES_GITHUB_TOKEN.")
+          PY
+
+      - name: Reconcile sessions, validate PRs and fill available slots
+        run: |
+          if [ "$JULES_DRY_RUN" = "true" ]; then
+            python3 -m tools.jules_autopilot tick --policy .github/jules/policy.json --dry-run
+          else
+            python3 -m tools.jules_autopilot tick --policy .github/jules/policy.json
+          fi

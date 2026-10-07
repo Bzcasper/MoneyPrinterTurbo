@@ -34,6 +34,7 @@ debug/
 debug_*.py
 test_*.py
 !test/services/test_*.py
+!test/tools/test_*.py
 !test/test_*.py
 streamlit.log
 .coverage
@@ -45,3 +46,4 @@ htmlcov/
 
 # Claude Code 订阅令牌（docker compose 自动读取），禁止提交
 .env
+.env.jules
