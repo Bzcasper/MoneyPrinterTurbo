@@ -36,27 +36,28 @@ DIY_IMAGE_TEMPLATE = (
     "organized tools nearby, detailed DIY tutorial style, photorealistic"
 )
 
-TYPE_BEAT_SCRIPT_PROMPT = """Write sparse, original noir spoken-word in the requested language.
-Use two or three short lines per paragraph, with quiet atmosphere and space
-for the music. Use no artist names, real people's names, quoted lyrics or
-copyrighted characters. Keep it suitable for monetized publishing. The final
-line tells the listener to lease the beat via the link in the description.
-Use no markdown, headings or artist comparisons."""
+TYPE_BEAT_SCRIPT_PROMPT = """Write a concise visual treatment for an instrumental type-beat video.
+Describe one continuous abstract cinematic world that evolves with the music.
+Use no narrator dialogue, lyrics, artist comparisons, people, faces, silhouettes,
+brands, copyrighted characters or readable text. Emphasize color, geometry,
+light, reflective materials, particles, atmosphere, scale and beat-reactive
+transformation. Keep the treatment suitable for a 16:9 YouTube master."""
 
 TYPE_BEAT_TERMS_PROMPT = """Return {amount} complete English scene prompts as a JSON array of strings,
-and nothing else. Each scene description must contain twenty to thirty-five
-words before its mandatory style suffix. Describe one location, its atmosphere
-and one slowly moving element. Use slow, loopable motion only. Show no faces;
-silhouettes seen from behind or far away are acceptable. Use no artist names,
-real people, brands, copyrighted characters or readable text. Vary locations
-while retaining one consistent look across all scenes. Append exactly this
-suffix to every prompt:
-dark noir, cinematic, 35mm film grain, low-key lighting, deep shadows, teal and crimson neon accents"""
+and nothing else. Every scene belongs to one continuous vibrant abstract film.
+Describe decisive focal geometry or environment, saturated spectral color,
+foreground/midground/background depth, emissive light, reflective materials,
+particles, atmospheric scale and one clear visual transformation or motion cue.
+Show no people, faces, bodies, silhouettes or character-like figures. Use no
+artist names, brands, copyrighted characters, logos or readable text. Vary shot
+geometry and scale while preserving one coherent palette, material language and
+lighting logic across all scenes. Append exactly this suffix to every prompt:
+vibrant abstract cinematic masterpiece, saturated spectral light, reflective materials, volumetric atmosphere, deep spatial layers, premium 16:9 composition, no people"""
 
 TYPE_BEAT_IMAGE_TEMPLATE = (
-    "dark cinematic still of {term}, neon-noir lighting, rain and smoke, "
-    "luxury aesthetic, album-cover composition, ultra high contrast, "
-    "photorealistic"
+    "vibrant abstract cinematic frame of {term}, saturated spectral light, "
+    "reflective materials, volumetric atmosphere, deep spatial layers, "
+    "premium 16:9 composition, no people"
 )
 
 JEWELRY_SCRIPT_PROMPT = """Write this as a 30-second luxury jewelry spot. Line one is the hook - desire,
@@ -105,14 +106,14 @@ VERTICALS: dict[str, dict] = {
     "type_beat": {
         "label": "Type Beat Music Video",
         "description": (
-            "Dark loopable visuals over your beat: no voiceover, minimal "
-            "on-screen text, portrait Shorts format. Drop your beat file in "
-            "as custom background music."
+            "Vibrant character-free abstract visuals over the full beat: no "
+            "voiceover and no embedded text, composed as a landscape YouTube "
+            "master. Drop your beat file in as custom background music."
         ),
         "script_prompt": TYPE_BEAT_SCRIPT_PROMPT,
         "terms_prompt": TYPE_BEAT_TERMS_PROMPT,
         "image_template": TYPE_BEAT_IMAGE_TEMPLATE,
-        "aspect": "9:16",
+        "aspect": "16:9",
         "voice_mode": "none",
         "voice_note": "No voiceover - the beat is the audio.",
         "bgm_type": "custom",

@@ -75,6 +75,50 @@ def test_cut_selection_uses_events_and_fills_quiet_gaps():
     assert video._beat_cut_times([], 11.7, 5) == pytest.approx([0, 5, 10, 11.7])
 
 
+def test_canonical_cut_timeline_is_validated_and_snapped_to_audio_duration():
+    cuts = video.validate_beat_cut_times([0.001, 2.0, 4.7, 8.399], 8.4)
+    assert cuts == pytest.approx([0.0, 2.0, 4.7, 8.4])
+
+
+@pytest.mark.parametrize(
+    "cuts, duration, message",
+    [
+        ([0.5, 2.0, 8.4], 8.4, "start at zero"),
+        ([0.0, 2.0, 8.0], 8.4, "end at the beat duration"),
+        ([0.0, 2.0, 2.0, 8.4], 8.4, "strictly increase"),
+    ],
+)
+def test_invalid_canonical_cut_timeline_is_rejected(cuts, duration, message):
+    with pytest.raises(ValueError, match=message):
+        video.validate_beat_cut_times(cuts, duration)
+
+
+def test_final_video_prefers_canonical_cut_timeline_over_redetecting_beats(tmp_path):
+    cut_times = [0.0, 2.0, 4.7, 8.4]
+    params = beat_params(
+        video_source="firefly",
+        beat_sync_cuts=True,
+        beat_bpm=100,
+        beat_cut_times=cut_times,
+    )
+    with (
+        patch.object(utils, "task_dir", return_value=str(tmp_path)),
+        patch.object(task.sm.state, "update_task"),
+        patch.object(video, "analyze_beat") as detect,
+        patch.object(video, "combine_videos") as combine,
+        patch.object(video, "generate_video", return_value=True),
+        patch.object(video, "apply_type_beat_visuals"),
+    ):
+        task_artifacts.write_script_data("beat", {"script": "Vibrant abstract world"})
+        task.generate_final_videos(
+            "beat", params, ["a.mp4", "b.mp4", "c.mp4"], "beat.wav", "", 8.4
+        )
+        saved = task_artifacts.read_script_data("beat")
+    detect.assert_not_called()
+    assert combine.call_args.kwargs["cut_times"] == pytest.approx(cut_times)
+    assert saved["beat_analysis"] == {"bpm": 100.0, "cut_times": cut_times}
+
+
 def test_analysis_falls_back_to_onsets_and_preserves_explicit_bpm():
     detector = SimpleNamespace(
         load=Mock(return_value=(np.zeros(10), 22050)),

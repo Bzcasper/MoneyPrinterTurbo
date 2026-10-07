@@ -140,6 +140,9 @@ class VideoParams(BaseModel):
     beat_overlay_cards: bool = False
     beat_title: str = Field(default="", max_length=200)
     beat_bpm: float = Field(default=0.0, ge=0, le=400, allow_inf_nan=False)
+    beat_cut_times: Optional[
+        List[Annotated[float, Field(ge=0, allow_inf_nan=False)]]
+    ] = Field(default=None, min_length=2, max_length=51)
     beat_key: str = Field(default="", max_length=64)
     beat_genre: str = Field(default="", max_length=100)
     beat_lease_url: str = Field(default="", max_length=2048)

@@ -1066,9 +1066,18 @@ def generate_final_videos(
     if beat_mode:
         timed_options["target_duration"] = audio_duration
         if params.beat_sync_cuts:
-            beat_info = video.analyze_beat(
-                audio_file, audio_duration, params.video_clip_duration, params.beat_bpm
-            )
+            requested_cut_times = getattr(params, "beat_cut_times", None)
+            if requested_cut_times:
+                beat_info = {
+                    "bpm": float(getattr(params, "beat_bpm", 0.0) or 0.0),
+                    "cut_times": video.validate_beat_cut_times(
+                        requested_cut_times, audio_duration
+                    ),
+                }
+            else:
+                beat_info = video.analyze_beat(
+                    audio_file, audio_duration, params.video_clip_duration, params.beat_bpm
+                )
             timed_options["cut_times"] = beat_info["cut_times"]
         task_artifacts.patch_script_data(task_id, beat_analysis=beat_info)
     elif step_durations is not None:
@@ -1779,7 +1788,9 @@ def _run_pipeline(
 
     if stop_at not in ("script", "terms") and video.is_beat_length_mode(params):
         try:
-            _resolve_type_beat_audio(params)
+            _, beat_duration, _ = _resolve_type_beat_audio(params)
+            if params.beat_sync_cuts and getattr(params, "beat_cut_times", None):
+                video.validate_beat_cut_times(params.beat_cut_times, beat_duration)
         except (OSError, ValueError) as exc:
             return _mark_task_failed(task_id, "preflight", str(exc))
 

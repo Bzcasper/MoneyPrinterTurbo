@@ -1001,6 +1001,41 @@ def _beat_cut_times(events, duration: float, max_clip_duration: float) -> list[f
     return cuts
 
 
+def validate_beat_cut_times(cut_times, duration: float) -> list[float]:
+    """Validate a caller-supplied canonical scene timeline against the beat duration."""
+    if not isinstance(cut_times, (list, tuple)) or len(cut_times) < 2:
+        raise ValueError("beat cut times must contain at least start and end")
+    if len(cut_times) > 51:
+        raise ValueError("beat cut times support at most 50 scenes")
+
+    try:
+        points = [float(value) for value in cut_times]
+        target_duration = float(duration)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("beat cut times must be numeric") from exc
+
+    if (
+        not math.isfinite(target_duration)
+        or target_duration <= 0
+        or any(not math.isfinite(value) or value < 0 for value in points)
+    ):
+        raise ValueError("beat cut times and duration must be finite and non-negative")
+
+    tolerance = max(0.05, 1 / fps)
+    if abs(points[0]) > tolerance:
+        raise ValueError("beat cut times must start at zero")
+    if abs(points[-1] - target_duration) > tolerance:
+        raise ValueError("beat cut times must end at the beat duration")
+
+    points[0] = 0.0
+    points[-1] = target_duration
+    minimum_hold = 1 / fps
+    for previous, current in zip(points, points[1:]):
+        if current - previous < minimum_hold:
+            raise ValueError("beat cut times must strictly increase by at least one frame")
+    return points
+
+
 def analyze_beat(
     audio_file: str, duration: float, max_clip_duration: float, bpm: float = 0.0
 ) -> dict:

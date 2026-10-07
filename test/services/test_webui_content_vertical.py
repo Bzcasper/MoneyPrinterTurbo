@@ -101,14 +101,14 @@ def test_jewelry_preset_fills_script_prompt_and_production_settings():
         assert any("AriaNeural" in note for note in notes)
 
 
-def test_type_beat_preset_disables_voiceover_and_keeps_portrait():
-    """Type Beat 垂类必须关闭配音、走自定义 BGM，并保持竖屏。"""
+def test_type_beat_preset_disables_voiceover_and_uses_landscape_master():
+    """Type Beat 垂类关闭配音、走自定义 BGM，并使用横屏 YouTube 主版本。"""
     with _running_app(_GroupedSelectHarness()) as app:
         _select_vertical(app, "type_beat")
 
         assert app.session_state["voice_mode_control_en"] == "none"
         assert app.session_state["bgm_type_select_en"] == "custom"
-        assert app.session_state["video_aspect_for_firefly_en"] == "9:16"
+        assert app.session_state["video_aspect_for_firefly_en"] == "16:9"
         notes = app.session_state["content_vertical_notes"]
         assert any("beat" in note.lower() for note in notes)
 
