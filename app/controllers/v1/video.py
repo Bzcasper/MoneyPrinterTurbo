@@ -281,7 +281,10 @@ def create_task(
 def _run_type_beat_project_render(task_id: str, project_id: str) -> None:
     root = pathlib.Path(config.root_dir)
     script = root / "scripts" / "render_typebeat_project.py"
-    output = pathlib.Path("/srv/data/n8n-media/store/strictlybeats") / project_id / "final" / "moneyprinterturbo-master.mp4"
+    output_root = pathlib.Path(
+        os.environ.get("TYPEBEAT_OUTPUT_ROOT", "/srv/data/n8n-media/store/strictlybeats")
+    )
+    output = output_root / project_id / "final" / "moneyprinterturbo-master.mp4"
     env = os.environ.copy()
     env["PYTHONPATH"] = str(root)
     sm.state.patch_task(task_id, progress=5, project_id=project_id, output_path=str(output))
