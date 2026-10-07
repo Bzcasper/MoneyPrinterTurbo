@@ -213,7 +213,9 @@ def normalize_audio(source: str, work_dir: Path) -> str:
     return str(output)
 
 
-def _render_image_motion(image_path: str, output: Path, duration: float, ordinal: int) -> str:
+def _render_image_motion(
+    image_path: str, output: Path, duration: float, ordinal: int, *, threads: int = 4
+) -> str:
     width, height = VideoAspect.landscape.to_resolution()
     fps = 30
     # Deterministic, subtle Ken Burns movement. Direction alternates by scene so
@@ -234,7 +236,9 @@ def _render_image_motion(image_path: str, output: Path, duration: float, ordinal
             "-loop", "1", "-framerate", str(fps), "-i", image_path,
             "-vf", vf, "-t", f"{duration:.3f}", "-an", "-c:v", "libx264",
             "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart", str(output),
+            "-r", str(fps), "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
+            "-profile:v", "high", "-level:v", "4.2", "-video_track_timescale", "90000",
+            "-threads", str(max(1, threads)), "-movflags", "+faststart", str(output),
         ],
         check=True,
         timeout=max(120, int(duration * 12)),
@@ -242,17 +246,106 @@ def _render_image_motion(image_path: str, output: Path, duration: float, ordinal
     return str(output)
 
 
-def materialize_scene_sources(project: dict, work_dir: Path) -> list[str]:
+def _normalize_video_scene(
+    video_path: str, output: Path, duration: float, *, threads: int = 4
+) -> str:
+    width, height = VideoAspect.landscape.to_resolution()
+    fps = 30
+    vf = (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},fps={fps},format=yuv420p,setpts=PTS-STARTPTS"
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-stream_loop", "-1", "-i", video_path, "-an", "-vf", vf,
+            "-t", f"{duration:.3f}", "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "18", "-pix_fmt", "yuv420p", "-r", str(fps),
+            "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
+            "-profile:v", "high", "-level:v", "4.2", "-video_track_timescale", "90000",
+            "-threads", str(max(1, threads)), "-movflags", "+faststart", str(output),
+        ],
+        check=True,
+        timeout=max(120, int(duration * 12)),
+    )
+    return str(output)
+
+
+def materialize_scene_sources(
+    project: dict, work_dir: Path, *, threads: int = 4, normalize_video: bool = False
+) -> list[str]:
     sources: list[str] = []
     for scene in project["scenes"]:
         asset_path = scene["asset_path"]
-        if scene["asset_type"] == "video":
-            sources.append(asset_path)
-            continue
         duration = scene["end_seconds"] - scene["start_seconds"]
+        if scene["asset_type"] == "video":
+            if not normalize_video:
+                sources.append(asset_path)
+                continue
+            output = work_dir / f"scene-{scene['ordinal']:03d}-video-motion.mp4"
+            sources.append(
+                _normalize_video_scene(asset_path, output, duration, threads=threads)
+            )
+            continue
         output = work_dir / f"scene-{scene['ordinal']:03d}-image-motion.mp4"
-        sources.append(_render_image_motion(asset_path, output, duration, scene["ordinal"]))
+        sources.append(
+            _render_image_motion(
+                asset_path, output, duration, scene["ordinal"], threads=threads
+            )
+        )
     return sources
+
+
+def _concat_normalized_scenes(scene_sources: list[str], output: Path, duration: float) -> None:
+    concat_file = output.with_suffix(".concat.txt")
+    lines = []
+    for source in scene_sources:
+        source_path = Path(source).resolve()
+        if "'" in str(source_path) or "\n" in str(source_path):
+            raise SystemExit(f"unsupported scene path for concat: {source_path}")
+        lines.append(f"file '{source_path}'")
+    concat_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    staged = output.with_name(f".{output.name}.staged.mp4")
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "concat", "-safe", "0", "-i", str(concat_file),
+                "-c", "copy", "-fflags", "+genpts", "-t", f"{duration:.3f}",
+                "-movflags", "+faststart", str(staged),
+            ],
+            check=True,
+            timeout=max(300, int(duration * 4)),
+        )
+        if not staged.is_file() or staged.stat().st_size <= 0:
+            raise SystemExit("fast concat did not produce a usable output")
+        os.replace(staged, output)
+    finally:
+        concat_file.unlink(missing_ok=True)
+        staged.unlink(missing_ok=True)
+
+
+def _mux_master_audio(combined: Path, audio: str, output: Path, duration: float) -> None:
+    staged = output.with_name(f".{output.name}.staged.mp4")
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(combined), "-i", audio,
+                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
+                "-t", f"{duration:.3f}", "-shortest", "-movflags", "+faststart",
+                str(staged),
+            ],
+            check=True,
+            timeout=max(300, int(duration * 4)),
+        )
+        if not staged.is_file() or staged.stat().st_size <= 0:
+            raise SystemExit("fast audio mux did not produce a usable output")
+        os.replace(staged, output)
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 def validate_production_shape(project: dict) -> None:
@@ -270,21 +363,41 @@ def validate_production_shape(project: dict) -> None:
         )
 
 
-def render_project(project: dict, output: Path, *, threads: int = 4) -> dict:
-    output.parent.mkdir(parents=True, exist_ok=True)
-    work_dir = output.parent / f".{project['project_id']}-mpt"
-    work_dir.mkdir(parents=True, exist_ok=True)
+def _render_result(
+    project: dict, output: Path, audio: str, duration: float, cuts: list[float],
+    scene_sources: list[str], *, render_mode: str, bgm_ok: bool = True,
+) -> dict:
+    if not bgm_ok or not output.is_file() or output.stat().st_size <= 0:
+        raise SystemExit("MoneyPrinterTurbo final render did not produce a usable output")
+    image_count = sum(scene["asset_type"] == "image" for scene in project["scenes"])
+    video_count = sum(scene["asset_type"] == "video" for scene in project["scenes"])
+    result = {
+        **project,
+        "audio_path": audio,
+        "output": str(output),
+        "duration_seconds": duration,
+        "scene_count": len(cuts) - 1,
+        "asset_count": len(scene_sources),
+        "image_scene_count": image_count,
+        "video_scene_count": video_count,
+        "render_mode": render_mode,
+        "bgm_ok": bool(bgm_ok),
+    }
+    manifest = output.with_suffix(".manifest.json")
+    manifest.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    return result
 
-    audio = normalize_audio(project["audio_path"], work_dir)
-    duration = float(project["cuts"][-1])
-    cuts = video.validate_beat_cut_times(project["cuts"], duration)
-    scene_sources = materialize_scene_sources(project, work_dir)
+
+def _render_project_legacy(
+    project: dict, output: Path, work_dir: Path, audio: str, duration: float,
+    cuts: list[float], *, threads: int,
+) -> dict:
+    scene_sources = materialize_scene_sources(project, work_dir, threads=threads)
     if len(scene_sources) != len(cuts) - 1:
         raise SystemExit(
             f"scene/source mismatch: {len(scene_sources)} assets for {len(cuts) - 1} cuts"
         )
     combined = str(work_dir / "combined.mp4")
-
     video.combine_videos(
         combined_video_path=combined,
         video_paths=scene_sources,
@@ -318,24 +431,51 @@ def render_project(project: dict, output: Path, *, threads: int = 4) -> dict:
     bgm_ok = video.generate_video(
         combined, audio, "", str(output), params, bgm_file_override=""
     )
-    if not bgm_ok or not output.is_file() or output.stat().st_size <= 0:
-        raise SystemExit("MoneyPrinterTurbo final render did not produce a usable output")
-    image_count = sum(scene["asset_type"] == "image" for scene in project["scenes"])
-    video_count = sum(scene["asset_type"] == "video" for scene in project["scenes"])
-    result = {
-        **project,
-        "audio_path": audio,
-        "output": str(output),
-        "duration_seconds": duration,
-        "scene_count": len(cuts) - 1,
-        "asset_count": len(scene_sources),
-        "image_scene_count": image_count,
-        "video_scene_count": video_count,
-        "bgm_ok": bool(bgm_ok),
-    }
-    manifest = output.with_suffix(".manifest.json")
-    manifest.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    return result
+    return _render_result(
+        project, output, audio, duration, cuts, scene_sources,
+        render_mode="legacy", bgm_ok=bool(bgm_ok),
+    )
+
+
+def _render_project_fast(
+    project: dict, output: Path, work_dir: Path, audio: str, duration: float,
+    cuts: list[float], *, threads: int,
+) -> dict:
+    scene_sources = materialize_scene_sources(
+        project, work_dir, threads=threads, normalize_video=True
+    )
+    if len(scene_sources) != len(cuts) - 1:
+        raise SystemExit(
+            f"scene/source mismatch: {len(scene_sources)} assets for {len(cuts) - 1} cuts"
+        )
+    combined = work_dir / "combined-fast.mp4"
+    _concat_normalized_scenes(scene_sources, combined, duration)
+    _mux_master_audio(combined, audio, output, duration)
+    return _render_result(
+        project, output, audio, duration, cuts, scene_sources, render_mode="fast"
+    )
+
+
+def render_project(
+    project: dict, output: Path, *, threads: int = 4, render_mode: str | None = None
+) -> dict:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    work_dir = output.parent / f".{project['project_id']}-mpt"
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    audio = normalize_audio(project["audio_path"], work_dir)
+    duration = float(project["cuts"][-1])
+    cuts = video.validate_beat_cut_times(project["cuts"], duration)
+    mode = (render_mode or os.environ.get("TYPEBEAT_RENDER_MODE", "fast")).strip().lower()
+    if mode == "legacy":
+        return _render_project_legacy(
+            project, output, work_dir, audio, duration, cuts, threads=threads
+        )
+    if mode == "fast":
+        return _render_project_fast(
+            project, output, work_dir, audio, duration, cuts, threads=threads
+        )
+    raise SystemExit(f"unsupported type-beat render mode: {mode}")
 
 
 def _default_output(project_id: str) -> Path:
@@ -351,6 +491,10 @@ def main() -> None:
     parser.add_argument("--audio", help="Override the canonical/manifest source audio path")
     parser.add_argument("--output")
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument(
+        "--render-mode", choices=("fast", "legacy"),
+        default=os.environ.get("TYPEBEAT_RENDER_MODE", "fast"),
+    )
     parser.add_argument("--plan-only", action="store_true")
     args = parser.parse_args()
 
@@ -386,7 +530,9 @@ def main() -> None:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise SystemExit(f"render already in progress: {project['project_id']}") from exc
-        result = render_project(project, output, threads=max(1, args.threads))
+        result = render_project(
+            project, output, threads=max(1, args.threads), render_mode=args.render_mode
+        )
     print(json.dumps(result, indent=2))
 
 
