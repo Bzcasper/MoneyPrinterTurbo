@@ -24,6 +24,11 @@ DB_USER = os.environ.get("MUSIC_INTEL_DB_USER", "postgres")
 TYPEBEAT_OUTPUT_ROOT = Path(
     os.environ.get("TYPEBEAT_OUTPUT_ROOT", "/srv/data/n8n-media/store/strictlybeats")
 )
+TYPEBEAT_MIN_SCENES = int(os.environ.get("TYPEBEAT_MIN_SCENES", "30"))
+TYPEBEAT_MAX_SCENES = int(os.environ.get("TYPEBEAT_MAX_SCENES", "50"))
+TYPEBEAT_REQUIRED_MOTION_SCENES = int(
+    os.environ.get("TYPEBEAT_REQUIRED_MOTION_SCENES", "10")
+)
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 _VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 
@@ -250,6 +255,21 @@ def materialize_scene_sources(project: dict, work_dir: Path) -> list[str]:
     return sources
 
 
+def validate_production_shape(project: dict) -> None:
+    scene_count = len(project["scenes"])
+    motion_count = sum(scene["asset_type"] == "video" for scene in project["scenes"])
+    if not TYPEBEAT_MIN_SCENES <= scene_count <= TYPEBEAT_MAX_SCENES:
+        raise SystemExit(
+            f"production type-beat requires {TYPEBEAT_MIN_SCENES}-{TYPEBEAT_MAX_SCENES} scenes, "
+            f"got {scene_count}"
+        )
+    if motion_count != TYPEBEAT_REQUIRED_MOTION_SCENES:
+        raise SystemExit(
+            f"production type-beat requires exactly {TYPEBEAT_REQUIRED_MOTION_SCENES} motion scenes, "
+            f"got {motion_count}"
+        )
+
+
 def render_project(project: dict, output: Path, *, threads: int = 4) -> dict:
     output.parent.mkdir(parents=True, exist_ok=True)
     work_dir = output.parent / f".{project['project_id']}-mpt"
@@ -337,6 +357,8 @@ def main() -> None:
     if bool(args.project_id) == bool(args.manifest):
         raise SystemExit("provide exactly one of project_id or --manifest")
     project = load_manifest(args.manifest) if args.manifest else load_project(args.project_id)
+    if not args.manifest:
+        validate_production_shape(project)
     if args.audio:
         if not Path(args.audio).is_file():
             raise SystemExit(f"source audio is missing: {args.audio}")
