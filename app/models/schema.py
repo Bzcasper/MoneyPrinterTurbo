@@ -1,6 +1,6 @@
 import warnings
 from enum import Enum
-from typing import Any, List, Literal, Optional, Union
+from typing import Annotated, Any, List, Literal, Optional, Union
 
 import pydantic
 from pydantic import BaseModel, ConfigDict, Field
@@ -269,6 +269,12 @@ class VideoSocialMetadataParams:
 class TaskVideoRequest(VideoParams, BaseModel):
     # Bound API resource requests while leaving the CLI's explicit batch and
     # FFmpeg thread controls in VideoParams unchanged.
+    video_subject: str = Field(..., max_length=500)
+    video_script: str = Field(default="", max_length=8000)
+    video_terms: Optional[
+        Annotated[str, Field(max_length=8000)]
+        | Annotated[List[Annotated[str, Field(max_length=255)]], Field(max_length=50)]
+    ] = None
     video_count: int = Field(default=1, ge=1, le=5)
     video_clip_duration: int = Field(default=5, ge=1, le=15)
     n_threads: Optional[int] = Field(default=2, ge=1, le=16)
@@ -279,12 +285,17 @@ class TaskQueryRequest(BaseModel):
 
 
 class VideoScriptRequest(VideoScriptParams, BaseModel):
-    pass
+    video_subject: Optional[str] = Field(default="春天的花海", max_length=500)
 
 
 class VideoTermsRequest(VideoTermsParams, BaseModel):
     # Ordered term generation allocates an example list proportional to amount
     # before contacting the model. Reject malformed or excessive API requests.
+    video_subject: Optional[str] = Field(default="春天的花海", max_length=500)
+    video_script: Optional[str] = Field(
+        default="春天的花海，如诗如画般展现在眼前。万物复苏的季节里，大地披上了一袭绚丽多彩的盛装。金黄的迎春、粉嫩的樱花、洁白的梨花、艳丽的郁金香……",
+        max_length=8000,
+    )
     amount: int = Field(default=5, ge=1, le=50)
 
 
