@@ -86,7 +86,9 @@ def test_materialize_scene_sources_converts_only_images(tmp_path):
     with patch.object(renderer, "_render_image_motion", return_value=rendered) as image_motion:
         sources = renderer.materialize_scene_sources(project, tmp_path)
     assert sources == [rendered, motion]
-    image_motion.assert_called_once_with(image, tmp_path / "scene-001-image-motion.mp4", 2.0, 1)
+    image_motion.assert_called_once_with(
+        image, tmp_path / "scene-001-image-motion.mp4", 2.0, 1, threads=4
+    )
 
 
 def test_render_project_enforces_scene_order_and_preserves_full_beat_level(tmp_path):
@@ -121,14 +123,66 @@ def test_render_project_enforces_scene_order_and_preserves_full_beat_level(tmp_p
         patch.object(renderer.video, "combine_videos") as combine,
         patch.object(renderer.video, "generate_video", side_effect=fake_generate),
     ):
-        result = renderer.render_project(project, output, threads=2)
+        result = renderer.render_project(project, output, threads=2, render_mode="legacy")
 
+    assert result["render_mode"] == "legacy"
     assert result["image_scene_count"] == 1
     assert result["video_scene_count"] == 1
     assert result["scene_count"] == 2
     assert combine.call_args.kwargs["video_paths"] == ["image-motion.mp4", motion]
     assert combine.call_args.kwargs["cut_times"] == [0.0, 2.0, 5.0]
     assert combine.call_args.kwargs["strict_cut_order"] is True
+
+
+def test_fast_render_normalizes_once_then_stream_copies_concat_and_mux(tmp_path):
+    audio = _touch(tmp_path / "beat.wav")
+    image = _touch(tmp_path / "scene.png")
+    motion = _touch(tmp_path / "motion.mp4")
+    output = tmp_path / "final.mp4"
+    project = {
+        "project_id": "fixture-fast",
+        "source_clip_id": "clip",
+        "title": "Fixture Fast",
+        "audio_path": audio,
+        "source_kind": "decoded_wav",
+        "cuts": [0.0, 2.0, 5.0],
+        "assets": [image, motion],
+        "scenes": [
+            {"ordinal": 1, "start_seconds": 0.0, "end_seconds": 2.0, "asset_type": "image", "asset_path": image},
+            {"ordinal": 2, "start_seconds": 2.0, "end_seconds": 5.0, "asset_type": "video", "asset_path": motion},
+        ],
+    }
+
+    def fake_mux(_combined, _audio, filename, _duration):
+        Path(filename).write_bytes(b"fast-video")
+
+    with (
+        patch.object(renderer, "normalize_audio", return_value=audio),
+        patch.object(
+            renderer,
+            "materialize_scene_sources",
+            return_value=["scene-image.mp4", "scene-video.mp4"],
+        ) as materialize,
+        patch.object(renderer.video, "validate_beat_cut_times", return_value=[0.0, 2.0, 5.0]),
+        patch.object(renderer, "_concat_normalized_scenes") as concat,
+        patch.object(renderer, "_mux_master_audio", side_effect=fake_mux) as mux,
+        patch.object(renderer.video, "combine_videos") as generic_combine,
+        patch.object(renderer.video, "generate_video") as generic_generate,
+    ):
+        result = renderer.render_project(project, output, threads=3, render_mode="fast")
+
+    assert result["render_mode"] == "fast"
+    materialize.assert_called_once_with(
+        project, tmp_path / ".fixture-fast-mpt", threads=3, normalize_video=True
+    )
+    concat.assert_called_once_with(
+        ["scene-image.mp4", "scene-video.mp4"],
+        tmp_path / ".fixture-fast-mpt" / "combined-fast.mp4",
+        5.0,
+    )
+    mux.assert_called_once()
+    generic_combine.assert_not_called()
+    generic_generate.assert_not_called()
 
 
 def test_api_project_render_honors_configurable_output_root(tmp_path, monkeypatch):
