@@ -193,12 +193,14 @@ def main() -> None:
     if existing:
         raise SystemExit("project_id already exists; allocate a fresh ID to prevent media overwrite")
     source = psql_rows(
-        "select a.duration_seconds,m.canonical_source_path "
+        "select a.duration_seconds,m.canonical_source_path,m.canonical_source_kind,a.make_instrumental "
         "from music_assets a join v_canonical_track_media m using (clip_id) "
         f"where a.clip_id={_q(clip_id)}::uuid and m.media_present=true limit 1;"
     )
     if not source:
         raise SystemExit("canonical beat not found")
+    if len(source[0]) < 4 or source[0][3] != "t" or source[0][2] not in {"official_master", "wav_only"} or not source[0][1].lower().endswith(".wav"):
+        raise SystemExit("type beat must use a canonical instrumental WAV, not a playback derivative")
     duration = float(source[0][0] or 0)
     if not math.isfinite(duration) or duration <= 0:
         raise SystemExit("canonical beat has invalid duration")
@@ -258,18 +260,16 @@ def main() -> None:
         sid = f"{project_id}-scene-{ordinal:03d}"
         is_motion = ordinal in motion_by_ordinal
         pref = "video" if is_motion else "image_motion"
-        beat = f"Scene {ordinal:02d}/{scene_count}: the same signal city advances deeper; preserve palette, geometry and direction of travel."
-        visual_prompt = f"{style}. {beat}"
-        motion_prompt = (
-            f"Forward cinematic motion continues from the prior scene; light ribbons pulse on the beat. {style}"
-            if is_motion else
-            "Subtle Ken Burns drift only; preserve continuity from the nearest motion frame."
-        )
+        selected = motion_by_ordinal[ordinal] if is_motion else supplied_stills.get(ordinal)
+        authored = str(selected.get("prompt") or "").strip() if selected else ""
+        beat = f"Scene {ordinal:02d}/{scene_count}: preserve the previous shot's position, motif, material, camera direction and lighting."
+        visual_prompt = authored or f"{style}. {beat}"
+        motion_prompt = (authored if is_motion else "Continue the preceding physical motion with restrained Ken Burns drift, no visual reset.")
         scene_rows.append(
             "(" + ",".join([
                 _q(sid), _q(project_id), str(ordinal), _q("type-beat"),
                 _q(beat), f"{start:.6f}", f"{end:.6f}", _q("present"),
-                _q("signal-city"), _q(pref), _q(visual_prompt), _q(motion_prompt),
+                _q("continuous-cinematic-episode"), _q(pref), _q(visual_prompt), _q(motion_prompt),
                 "'[]'::jsonb", "'{}'::jsonb", _q("PLANNED"),
                 _q("abstract continuous visualizer"), "'{}'::jsonb", "'{}'::jsonb",
                 _q("motion" if is_motion else "image_motion"), _q("free-only"),
