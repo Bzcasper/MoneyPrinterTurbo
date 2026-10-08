@@ -55,10 +55,21 @@ def psql_rows(sql: str) -> list[list[str]]:
 
 
 def psql_exec(sql: str) -> None:
-    _remote_command([
-        "docker", "exec", DB_CONTAINER, "psql", "-v", "ON_ERROR_STOP=1",
-        "-U", DB_USER, "-d", DB_NAME, "-c", sql,
-    ], timeout=120, capture=False)
+    """Stream large transactional SQL to psql via stdin, not an SSH argv string.
+
+    A 33-scene cinematic plan with full authored prompts routinely exceeds the
+    Linux per-argument limit. The old ssh ... psql -c <SQL> failed with E2BIG.
+    """
+    cmd = [
+        "docker", "exec", "-i", DB_CONTAINER, "psql", "-X", "-v", "ON_ERROR_STOP=1",
+        "-U", DB_USER, "-d", DB_NAME,
+    ]
+    if REMOTE_HOST:
+        cmd = [
+            "ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+            REMOTE_HOST, shlex.join(cmd),
+        ]
+    subprocess.run(cmd, input=sql, text=True, check=True, timeout=180)
 
 
 def remote_file_exists(path: str) -> bool:
