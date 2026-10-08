@@ -204,6 +204,9 @@ def main() -> None:
     scene_count = int(payload.get("scene_count") or 33)
     if not 30 <= scene_count <= 50:
         raise SystemExit("scene_count must be 30-50")
+    provider_policy = str(payload.get("provider_policy") or "firefly_first_grok_fallback")
+    if provider_policy not in {"firefly_first_grok_fallback", "canonical_image_first_verified"}:
+        raise SystemExit("invalid source media provenance policy")
     motions = payload.get("motion_assets")
     if not isinstance(motions, list) or len(motions) != 10:
         raise SystemExit("exactly 10 motion_assets are required")
@@ -318,7 +321,7 @@ def main() -> None:
         f"({_q(project_id)},'type_beat',{_q(clip_id)}::uuid,{_q(title)},'ASSETS_READY',false,"
         f"{_q(json.dumps({'mode': 'continuous_signal_city', 'identity': 'no_character'}))}::jsonb,"
         f"{_q(json.dumps({'style': style}))}::jsonb,"
-        f"{_q(json.dumps({'provider_policy': 'firefly_first_grok_fallback', 'required_motion_scenes': 10, 'scene_count': scene_count, 'bpm': bpm, 'beat_grid_cut_seconds': scene_boundaries}))}::jsonb);",
+        f"{_q(json.dumps({'provider_policy': provider_policy, 'required_motion_scenes': 10, 'scene_count': scene_count, 'bpm': bpm, 'beat_grid_cut_seconds': scene_boundaries}))}::jsonb);",
         "INSERT INTO media_video_scenes "
         "(scene_id,project_id,ordinal,section_name,source_text,start_seconds,end_seconds,timeline_mode,"
         "location_key,asset_preference,visual_prompt,motion_prompt,continuity_refs,qa_requirements,status,"
@@ -392,7 +395,7 @@ def main() -> None:
         "image_scene_count": len(image_paths),
         "generated_image_scene_count": len(supplied_stills),
         "motion_ordinals": motion_scene_ordinals,
-        "provider_policy": "firefly_first_grok_fallback",
+        "provider_policy": provider_policy,
     }))
 
 
