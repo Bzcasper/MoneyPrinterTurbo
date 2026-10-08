@@ -544,6 +544,29 @@ def assemble_type_beat_project_internal(request: Request, body: dict):
 
 
 @router.post(
+    "/internal/type-beat/r2-media/inspect",
+    summary="Import a private R2 asset with SHA-256 and FFprobe validation for n8n",
+)
+def inspect_private_r2_media_internal(request: Request, body: dict):
+    task_id = base.get_task_id(request)
+    try:
+        from scripts.r2_media_intake import fetch_verified_media
+        result = fetch_verified_media(
+            signed_url=str(body.get("signed_url") or ""),
+            asset_key=str(body.get("asset_key") or ""),
+            expected_sha256=str(body.get("expected_sha256") or ""),
+            project_id=str(body.get("project_id") or ""),
+            clip_id=str(body.get("clip_id") or ""),
+        )
+    except (ValueError, TypeError) as exc:
+        raise HttpException(task_id=task_id, status_code=422, message=str(exc)) from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HttpException(task_id=task_id, status_code=503,
+                            message="R2 signed media import or FFprobe unavailable") from exc
+    return utils.get_response(200, result)
+
+
+@router.post(
     "/internal/type-beat/scene-reference/resolve",
     summary="Find the exact previous Firefly final-frame Adobe reference for the next moving scene",
 )
