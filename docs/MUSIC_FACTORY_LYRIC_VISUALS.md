@@ -12,7 +12,8 @@
 
 - `scripts/music_factory_lyrics_story.py` handles lyric validation, section/ad-lib filtering and chronological 10-act story design. `scripts/music_factory_catalog.py` skips missing-lyric MP3s. `scripts/music_factory_worker.py` refuses a legacy mood-only song treatment and enforces lyric-bearing prompts of at most 1485 characters.
 - `scripts/music_factory_visual_qa.py` records exact 29 MP4 boundary measurements and weak-structure/hard-cut flags in `visual-continuity-review.json`. No automatic `visual_approved` changes.
-- Lyric-to-scene ordering is **not yet word-level aligned with the audible vocal timeline**. The exact audio-word timing/forced alignment and true provider first-frame image conditioning remain production quality blockers.
+- **ASR-anchored scene timing is now implemented**: a locally cached, CPU `faster-whisper` base model transcribes the SHA-verified song audio into timed words; monotonic 3+-word matches against canonical lyrics anchor ten acts and produce 31 variable scene boundaries. Song scene cuts follow those boundaries in the Modal FFmpeg xfade editor rather than uniform stretching. Songs with low match counts, less than 7/10 covered acts, invalid boundaries, or implausible shot lengths fail closed before expensive generation. The temporary source-audio copy is deleted, including on errors.
+- Alignment evidence is saved to `lyric-timing.json` and embedded into story and render receipts. **This is inferred timing for private review, not a verified forced alignment or lyric-level lip sync**; first-frame image conditioning and final visual continuity still require review. Beat videos retain the original uniformly timed editor and two-tag preview policy.
 - Private no-claim canary: `/home/bobby/Videos/scene-director/lyric-storyboards/LYRIC_REVIEW_caf91888-77ba-40ad-bf57-d627b4f39c8f.json`.
 
 ## Reloading the ROG API without losing a video worker
