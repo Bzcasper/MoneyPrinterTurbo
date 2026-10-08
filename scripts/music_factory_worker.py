@@ -185,8 +185,25 @@ def story(clip: dict, folder: Path) -> dict:
     output = folder / "story.json"
     if output.is_file():
         existing = json.loads(output.read_text())
-        if clip["media_kind"] == "song" and existing.get("planning_source") != "canonical_suno_lyrics_grounded_v1":
-            raise ValueError("Legacy mood-only song storyboard cannot be resumed as lyric-grounded")
+        if clip["media_kind"] == "song":
+            if existing.get("planning_source") != "canonical_suno_lyrics_grounded_v1":
+                raise ValueError("Legacy mood-only song storyboard cannot be resumed as lyric-grounded")
+            if not (existing.get("lyric_timing") or {}).get("scene_boundaries_seconds"):
+                from scripts.music_factory_catalog import _catalog
+                from scripts.music_factory_lyrics_story import qualified_catalog_lyrics
+                from scripts.music_factory_lyric_alignment import song_timing
+
+                lyrics = qualified_catalog_lyrics(_catalog(), clip["clip_id"], clip["title"])
+                if not lyrics or existing.get("lyrics_sha256") != hashlib.sha256(lyrics.encode()).hexdigest():
+                    raise ValueError("Cannot attach timing to an unverified old lyric plan")
+                report = song_timing(clip, lyrics, folder)
+                existing["lyric_timing"] = {
+                    "status": report["status"],
+                    "scene_boundaries_seconds": report["scene_boundaries_seconds"],
+                    "asr_matched_fraction": report["evidence"]["matched_fraction"],
+                    "word_level_forced_alignment_verified": False,
+                }
+                output.write_text(json.dumps(existing, indent=2, ensure_ascii=False) + "\n")
         return existing
     bpm = float(clip.get("bpm") or 120)
     title = clip["title"]
@@ -227,6 +244,15 @@ def story(clip: dict, folder: Path) -> dict:
         if not lyrics:
             raise ValueError("Canonical source lyrics missing; do not invent song scenes")
         treatment = build_lyric_story(clip, lyrics)
+        from scripts.music_factory_lyric_alignment import song_timing
+
+        timing = song_timing(clip, lyrics, folder)
+        treatment["lyric_timing"] = {
+            "status": timing["status"],
+            "scene_boundaries_seconds": timing["scene_boundaries_seconds"],
+            "asr_matched_fraction": timing["evidence"]["matched_fraction"],
+            "word_level_forced_alignment_verified": False,
+        }
     elif not isinstance(treatment, dict):
         treatment = build_story(clip)
 
@@ -386,6 +412,14 @@ def render(clip: dict, treatment: dict, folder: Path) -> dict:
         "--subtitle",
         str(treatment.get("thesis") or "Original music")[:58].replace(":", ""),
     ]
+    if clip["media_kind"] == "song":
+        timing = treatment.get("lyric_timing") or {}
+        if timing.get("status") != "ASR_ANCHORED_PRIVATE_REVIEW":
+            raise ValueError("Refusing unaligned lyric-song motion render")
+        args += [
+            "--scene-timings-json",
+            json.dumps(timing["scene_boundaries_seconds"], separators=(",", ":")),
+        ]
     report = call(args, timeout=3700)
     (folder / "modal-render.log").write_text(report[-8000:])
     file = out / output
@@ -420,6 +454,7 @@ def render(clip: dict, treatment: dict, folder: Path) -> dict:
         output_sha256=hashlib.sha256(file.read_bytes()).hexdigest(),
         output_bytes=file.stat().st_size,
         output_duration=secs,
+        lyric_timing=treatment.get("lyric_timing") if clip["media_kind"] == "song" else None,
         strict_first_frame_continuity_passed=False,
         human_approved=False,
         visual_approved=False,
