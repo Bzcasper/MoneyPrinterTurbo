@@ -54,6 +54,9 @@ def test_distinct_lane_storyboard_has_real_30_shot_handoffs(kind):
         story["scenes"][n]["opening_state"] == story["scenes"][n - 1]["end_state"]
         for n in range(1, 30)
     )
+    # Every shot uses a deliberate camera position; rhythm cues escalate per act.
+    assert len({s["camera"] for s in story["scenes"]}) == 30
+    assert len({s["music_reaction"] for s in story["scenes"]}) == 10
     assert all(
         len(generated_prompt(scene, story, n, kind)) <= 1485
         for n, scene in enumerate(story["scenes"], 1)

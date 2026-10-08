@@ -137,16 +137,17 @@ def generated_prompt(scene: dict, treatment: dict, slot: int, kind: str) -> str:
         f"SAME PHYSICAL CANON: {str(treatment['motif'])[:91]}.",
         f"PREVIOUS FRAME: {str(scene['opening_state'])[:95]}.",
         f"NATIVE VIDEO ACTION: {str(scene['action'])[:145]}.",
-        f"SET: {str(scene['location'])[:90]}. CAMERA: {str(scene['camera'])[:75]}.",
+        f"SET: {str(scene['location'])[:90]}. CAMERA: {str(scene['camera'])[:95]}.",
+        f"PHYSICAL RHYTHM: {str(scene.get('music_reaction', 'natural parallax and physical light response'))[:120]}.",
         f"NEXT FRAME: {str(scene['end_state'])[:95]}.",
         f"LIGHTING: {str(treatment.get('lighting', ''))[:92]}.",
-        "One real, physically moving 5 second video, coherent world and recurring shapes, no static animation or freeze, no title text, no WebGL, no equalizer.",
+        "Real moving 5-second shot; physical parallax, no freeze, montage, text, logo, WebGL or equalizer.",
         "Negative constraints: no face drift, no changing facial features, no hairstyle changes, no outfit changes, no age changes, no body proportion changes, no art style shift, no unintended photorealism/3D shift, no extra limbs, no distorted hands, no inconsistent colors, no random accessories, no changed eye color, no altered silhouette.",
     ]
     if kind == "song":
         fragments.insert(
             3,
-            "BC TRAP GOD original vocal-song visual, preserve recurring character identity only if introduced.",
+            "BC TRAP GOD song. No invented performer or character identity.",
         )
     result = " ".join(fragments)
     if len(result) > 1485:
@@ -211,72 +212,86 @@ def story(clip: dict, folder: Path) -> dict:
     return treatment
 
 
+def _normalize_video_length(path: Path) -> None:
+    """Convert longer provider-native clips to the approved five-second edit unit."""
+    data = probe(path)
+    seconds = float(data.get("format", {}).get("duration") or 0)
+    if 4.7 <= seconds <= 5.3:
+        return
+    if not 5.3 < seconds <= 20:
+        raise ValueError("Video candidate has unsupported source duration")
+    normalized = path.with_suffix(".normalized.mp4")
+    call(
+        [
+            "ffmpeg", "-y", "-nostdin", "-v", "error", "-i", path,
+            "-t", "5", "-an", "-vf",
+            "scale=1280:720:force_original_aspect_ratio=decrease,"
+            "pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=24",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "19",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart", normalized,
+        ],
+        timeout=120,
+    )
+    normalized.replace(path)
+
+
 def video_scene(
     slot: int, scene: dict, treatment: dict, folder: Path, kind: str
 ) -> dict:
+    from scripts.music_factory_provider_router import (
+        request_video, validated_path, scene_provider_order
+    )
+
     target = folder / "scenes" / f"scene-{slot:03d}.mp4"
     target.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path = folder / "scenes" / f"scene-{slot:03d}.json"
     if target.is_file() and moving(target):
+        receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
         return {
             "slot": slot,
             "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
             "already_present": True,
+            "provider": receipt.get("provider", "previous_verified"),
         }
     prompt = generated_prompt(scene, treatment, slot, kind)
-    last = "no_attempt"
-    for attempt in range(2):
-        try:
-            r = post(
-                FIRE_URL,
-                {
+    errors = []
+    for provider in scene_provider_order(slot):
+        for attempt in range(2 if provider == "firefly" else 1):
+            partial = target.with_suffix(".partial.mp4")
+            try:
+                result = request_video(provider, prompt, slot, timeout=380)
+                remote = validated_path(provider, result, slot=slot)
+                call(
+                    ["scp", "-q", "-o", "BatchMode=yes", "bobby-nuc:" + remote, partial],
+                    timeout=100,
+                )
+                if provider != "firefly":
+                    _normalize_video_length(partial)
+                if not moving(partial):
+                    raise ValueError("Provider output failed decoded-frame motion QA")
+                partial.replace(target)
+                receipt = {
                     "slot": slot,
-                    "duration": 5,
-                    "prompt": prompt,
-                    "strict_unlimited": True,
-                    "allow_credit_usage": False,
-                },
-                timeout=380,
-            )
-            remote = str(r.get("host_path") or "")
-            m = REMOTE_VIDEO.fullmatch(remote)
-            if not (
-                r.get("success") is True
-                and r.get("firefly_fair_use") is True
-                and r.get("credit_spending_allowed") is False
-                and r.get("provider") == "firefly"
-                and m
-                and int(m.group(1)) == slot
-            ):
-                raise ValueError(
-                    "provider missing verified unlimited native motion receipt"
-                )
-            partial = target.with_suffix(".partial")
-            call(
-                ["scp", "-q", "-o", "BatchMode=yes", "bobby-nuc:" + remote, partial],
-                timeout=100,
-            )
-            if not moving(partial):
+                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+                    "bytes": target.stat().st_size,
+                    "provider": provider,
+                    "model": str(result.get("model") or provider)[:95],
+                    "zero_credits_verified": (
+                        result.get("firefly_fair_use") is True
+                        and result.get("credit_spending_allowed") is False
+                        if provider == "firefly" else False
+                    ),
+                    "source_video": True,
+                }
+                receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+                return receipt
+            except Exception as exc:
                 partial.unlink(missing_ok=True)
-                raise ValueError(
-                    "5-second provider response is not genuine moving video"
-                )
-            partial.rename(target)
-            receipt = {
-                "slot": slot,
-                "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
-                "bytes": target.stat().st_size,
-                "provider": "firefly",
-                "zero_credits_verified": True,
-                "source_video": True,
-            }
-            (folder / "scenes" / f"scene-{slot:03d}.json").write_text(
-                json.dumps(receipt, indent=2) + "\n"
-            )
-            return receipt
-        except Exception as exc:
-            last = f"{type(exc).__name__}:{str(exc)[:185]}"
-            time.sleep(3 * (attempt + 1))
-    raise RuntimeError(f"scene {slot} failed: {last}")
+                error = f"{provider}:{type(exc).__name__}:{str(exc)[:130]}"
+                errors.append(error)
+                print(f"VIDEO_PROVIDER_RETRY {slot} {error}", flush=True)
+                time.sleep(3 * (attempt + 1))
+    raise RuntimeError(f"scene {slot} failed: {'; '.join(errors)[-350:]}")
 
 
 def render(clip: dict, treatment: dict, folder: Path) -> dict:
