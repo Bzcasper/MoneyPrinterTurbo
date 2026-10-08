@@ -161,6 +161,22 @@ def supplied_image_assets(raw: object, scene_count: int, motion_ordinals: list[i
     return by_ordinal
 
 
+def beat_aligned_boundaries(duration: float, bpm: float, scene_count: int) -> list[float]:
+    """Map ordered scene cuts to the nearest real-beat pulse without time drift."""
+    if not math.isfinite(duration) or duration <= 0 or not math.isfinite(bpm) or not 60 <= bpm <= 220:
+        raise ValueError("valid track duration and analyzed BPM required")
+    beat_period = 60.0 / bpm
+    beat_count = math.floor(duration / beat_period)
+    if beat_count < scene_count:
+        raise ValueError("not enough beats for distinct beat-aligned scenes")
+    beats = [0]
+    for ordinal in range(1, scene_count):
+        preferred = round((duration * ordinal / scene_count) / beat_period)
+        chosen = max(beats[-1] + 1, min(preferred, beat_count - (scene_count - ordinal)))
+        beats.append(chosen)
+    return [0.0] + [round(v * beat_period, 6) for v in beats[1:]] + [duration]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Assemble a canonical type-beat project from 10 free motion clips")
     ap.add_argument("--payload", required=True)
@@ -219,6 +235,10 @@ def main() -> None:
             "prompt": str(item.get("prompt") or "")[:6000],
         })
 
+    bpm = float(payload.get("bpm") or 0)
+    if not 60 <= bpm <= 220 or not math.isfinite(bpm):
+        raise SystemExit("verified track BPM required for scene planning")
+    scene_boundaries = beat_aligned_boundaries(duration, bpm, scene_count)
     motion_scene_ordinals = motion_ordinals(scene_count)
     motion_by_ordinal = dict(zip(motion_scene_ordinals, normalized_motions))
     supplied_stills = supplied_image_assets(payload.get("image_assets"), scene_count, motion_scene_ordinals)
@@ -255,8 +275,8 @@ def main() -> None:
     motion_asset_ids: dict[int, str] = {}
 
     for ordinal in range(1, scene_count + 1):
-        start = duration * (ordinal - 1) / scene_count
-        end = duration * ordinal / scene_count
+        start = scene_boundaries[ordinal - 1]
+        end = scene_boundaries[ordinal]
         sid = f"{project_id}-scene-{ordinal:03d}"
         is_motion = ordinal in motion_by_ordinal
         pref = "video" if is_motion else "image_motion"
@@ -287,7 +307,7 @@ def main() -> None:
         f"({_q(project_id)},'type_beat',{_q(clip_id)}::uuid,{_q(title)},'ASSETS_READY',false,"
         f"{_q(json.dumps({'mode': 'continuous_signal_city', 'identity': 'no_character'}))}::jsonb,"
         f"{_q(json.dumps({'style': style}))}::jsonb,"
-        f"{_q(json.dumps({'provider_policy': 'firefly_first_grok_fallback', 'required_motion_scenes': 10, 'scene_count': scene_count}))}::jsonb);",
+        f"{_q(json.dumps({'provider_policy': 'firefly_first_grok_fallback', 'required_motion_scenes': 10, 'scene_count': scene_count, 'bpm': bpm, 'beat_grid_cut_seconds': scene_boundaries}))}::jsonb);",
         "INSERT INTO media_video_scenes "
         "(scene_id,project_id,ordinal,section_name,source_text,start_seconds,end_seconds,timeline_mode,"
         "location_key,asset_preference,visual_prompt,motion_prompt,continuity_refs,qa_requirements,status,"
@@ -355,6 +375,8 @@ def main() -> None:
         "duration_seconds": duration,
         "scene_count": scene_count,
         "motion_scene_count": len(motion_scene_ordinals),
+        "bpm": bpm,
+        "beat_grid_cut_seconds": scene_boundaries,
         "image_scene_count": len(image_paths),
         "generated_image_scene_count": len(supplied_stills),
         "motion_ordinals": motion_scene_ordinals,
