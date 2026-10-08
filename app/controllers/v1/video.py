@@ -45,6 +45,18 @@ from app.services import state as sm
 from app.services import task as tm
 from app.utils import file_security, utils
 
+def _parse_json_cli_output(stdout: str) -> dict:
+    """Decode a CLI JSON envelope despite harmless app startup log lines."""
+    for line in reversed(str(stdout).splitlines()):
+        try:
+            result = json.loads(line.strip())
+        except (ValueError, TypeError):
+            continue
+        if isinstance(result, dict):
+            return result
+    raise ValueError("media subprocess returned no JSON object")
+
+
 # 统一在 V1 视频路由入口执行鉴权。verify_token 会在 api_key 为空时
 # 保留现有免认证行为，只有管理员显式配置后才会影响客户端。
 router = new_router(dependencies=[Depends(base.verify_token)])
@@ -440,7 +452,7 @@ def render_canonical_still_motion_internal(request: Request, body: dict):
     if result.returncode != 0:
         raise HttpException(task_id=request_id, status_code=422,
                             message="canonical image-motion render failed; verify source and slot state")
-    return utils.get_response(200, json.loads(result.stdout))
+    return utils.get_response(200, _parse_json_cli_output(result.stdout))
 
 
 @router.post(
@@ -474,7 +486,7 @@ def render_canonical_still_coverage_internal(request: Request, body: dict):
     )
     if result.returncode != 0:
         raise HttpException(task_id=request_id, status_code=422, message="canonical scene coverage failed; inspect source and scene state")
-    return utils.get_response(200, json.loads(result.stdout))
+    return utils.get_response(200, _parse_json_cli_output(result.stdout))
 
 
 @router.post(
@@ -491,7 +503,7 @@ def verify_full_motion_internal(request: Request, body: dict):
                           cwd=str(root),env={**os.environ,'PYTHONPATH':str(root)},text=True,capture_output=True,timeout=1200,check=False)
     if result.returncode!=0:
         raise HttpException(task_id=task_id,status_code=422,message="independent motion QA failed; inspect server report")
-    return utils.get_response(200,json.loads(result.stdout))
+    return utils.get_response(200,_parse_json_cli_output(result.stdout))
 
 
 @router.post(
@@ -518,7 +530,7 @@ def assemble_full_motion_internal(request: Request, body: dict):
         )
         if result.returncode != 0:
             raise HttpException(task_id=task_id, status_code=422, message="motion assembly failed: verify rights/source, completeness and media")
-        return utils.get_response(200, json.loads(result.stdout))
+        return utils.get_response(200, _parse_json_cli_output(result.stdout))
     finally:
         path.unlink(missing_ok=True)
 
