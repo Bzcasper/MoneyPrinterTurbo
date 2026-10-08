@@ -25,12 +25,19 @@ def _touch(path: Path, data: bytes = b"fixture") -> str:
 
 def test_psql_rows_uses_remote_database_host(monkeypatch):
     monkeypatch.setenv("MUSIC_INTEL_REMOTE_HOST", "bobby-nuc")
-    with patch.object(renderer.subprocess, "check_output", return_value="one|two\n") as check:
+    with patch.object(
+        renderer.subprocess, "check_output", return_value="one|two\n"
+    ) as check:
         rows = renderer.psql_rows("select 1;")
     assert rows == [["one", "two"]]
     command = check.call_args.args[0]
     assert command[:6] == [
-        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "bobby-nuc"
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "bobby-nuc",
     ]
     assert "docker exec ai-postgres psql" in command[-1]
     assert "select 1;" in command[-1]
@@ -55,7 +62,12 @@ def test_materialize_remote_path_caches_media(tmp_path, monkeypatch):
     assert str(tmp_path / "cache" / "project-1") in local
     command = run.call_args.args[0]
     assert command[:6] == [
-        "scp", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10"
+        "scp",
+        "-q",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
     ]
     assert command[6].startswith("bobby-nuc:/srv/data/n8n-media/")
 
@@ -70,12 +82,16 @@ def test_load_project_preserves_one_mixed_asset_per_scene(tmp_path):
             ["1", "0", "2", "", "", "image", image, "", ""],
             ["2", "2", "5", "video", motion, "image", image, "", ""],
         ],
+        [["false"]],
     ]
     with patch.object(renderer, "psql_rows", side_effect=rows):
         project = renderer.load_project("project-1")
     assert project["cuts"] == [0.0, 2.0, 5.0]
     assert [scene["asset_type"] for scene in project["scenes"]] == ["image", "video"]
-    assert [scene["asset_role"] for scene in project["scenes"]] == ["anchor", "locked_video"]
+    assert [scene["asset_role"] for scene in project["scenes"]] == [
+        "anchor",
+        "locked_video",
+    ]
     assert project["assets"] == [image, motion]
 
 
@@ -85,8 +101,9 @@ def test_load_project_rejects_scene_without_local_asset(tmp_path):
         [["clip-1", "Beat", audio, "decoded_wav"]],
         [["1", "0", "2", "video", str(tmp_path / "missing.mp4"), "", "", "", ""]],
     ]
-    with patch.object(renderer, "psql_rows", side_effect=rows), pytest.raises(
-        SystemExit, match="no local canonical asset"
+    with (
+        patch.object(renderer, "psql_rows", side_effect=rows),
+        pytest.raises(SystemExit, match="no local canonical asset"),
     ):
         renderer.load_project("project-1")
 
@@ -103,7 +120,8 @@ def test_manifest_rejects_non_contiguous_timeline(tmp_path):
             {"ordinal": 1, "start_seconds": 0, "end_seconds": 2, "asset_type": "image", "asset_path": "%s"},
             {"ordinal": 2, "start_seconds": 3, "end_seconds": 5, "asset_type": "image", "asset_path": "%s"}
           ]
-        }""" % (audio, image, image),
+        }"""
+        % (audio, image, image),
         encoding="utf-8",
     )
     with pytest.raises(SystemExit, match="not contiguous"):
@@ -115,12 +133,26 @@ def test_materialize_scene_sources_converts_only_images(tmp_path):
     motion = _touch(tmp_path / "motion.mp4")
     project = {
         "scenes": [
-            {"ordinal": 1, "start_seconds": 0.0, "end_seconds": 2.0, "asset_type": "image", "asset_path": image},
-            {"ordinal": 2, "start_seconds": 2.0, "end_seconds": 5.0, "asset_type": "video", "asset_path": motion},
+            {
+                "ordinal": 1,
+                "start_seconds": 0.0,
+                "end_seconds": 2.0,
+                "asset_type": "image",
+                "asset_path": image,
+            },
+            {
+                "ordinal": 2,
+                "start_seconds": 2.0,
+                "end_seconds": 5.0,
+                "asset_type": "video",
+                "asset_path": motion,
+            },
         ]
     }
     rendered = str(tmp_path / "scene-001-image-motion.mp4")
-    with patch.object(renderer, "_render_image_motion", return_value=rendered) as image_motion:
+    with patch.object(
+        renderer, "_render_image_motion", return_value=rendered
+    ) as image_motion:
         sources = renderer.materialize_scene_sources(project, tmp_path)
     assert sources == [rendered, motion]
     image_motion.assert_called_once_with(
@@ -142,8 +174,20 @@ def test_render_project_enforces_scene_order_and_preserves_full_beat_level(tmp_p
         "cuts": [0.0, 2.0, 5.0],
         "assets": [image, motion],
         "scenes": [
-            {"ordinal": 1, "start_seconds": 0.0, "end_seconds": 2.0, "asset_type": "image", "asset_path": image},
-            {"ordinal": 2, "start_seconds": 2.0, "end_seconds": 5.0, "asset_type": "video", "asset_path": motion},
+            {
+                "ordinal": 1,
+                "start_seconds": 0.0,
+                "end_seconds": 2.0,
+                "asset_type": "image",
+                "asset_path": image,
+            },
+            {
+                "ordinal": 2,
+                "start_seconds": 2.0,
+                "end_seconds": 5.0,
+                "asset_type": "video",
+                "asset_path": motion,
+            },
         ],
     }
 
@@ -155,12 +199,21 @@ def test_render_project_enforces_scene_order_and_preserves_full_beat_level(tmp_p
 
     with (
         patch.object(renderer, "normalize_audio", return_value=audio),
-        patch.object(renderer, "materialize_scene_sources", return_value=["image-motion.mp4", motion]),
-        patch.object(renderer.video, "validate_beat_cut_times", return_value=[0.0, 2.0, 5.0]),
+        patch.object(renderer, "tag_preview_audio", return_value=audio),
+        patch.object(
+            renderer,
+            "materialize_scene_sources",
+            return_value=["image-motion.mp4", motion],
+        ),
+        patch.object(
+            renderer.video, "validate_beat_cut_times", return_value=[0.0, 2.0, 5.0]
+        ),
         patch.object(renderer.video, "combine_videos") as combine,
         patch.object(renderer.video, "generate_video", side_effect=fake_generate),
     ):
-        result = renderer.render_project(project, output, threads=2, render_mode="legacy")
+        result = renderer.render_project(
+            project, output, threads=2, render_mode="legacy"
+        )
 
     assert result["render_mode"] == "legacy"
     assert result["image_scene_count"] == 1
@@ -185,8 +238,20 @@ def test_fast_render_normalizes_once_then_stream_copies_concat_and_mux(tmp_path)
         "cuts": [0.0, 2.0, 5.0],
         "assets": [image, motion],
         "scenes": [
-            {"ordinal": 1, "start_seconds": 0.0, "end_seconds": 2.0, "asset_type": "image", "asset_path": image},
-            {"ordinal": 2, "start_seconds": 2.0, "end_seconds": 5.0, "asset_type": "video", "asset_path": motion},
+            {
+                "ordinal": 1,
+                "start_seconds": 0.0,
+                "end_seconds": 2.0,
+                "asset_type": "image",
+                "asset_path": image,
+            },
+            {
+                "ordinal": 2,
+                "start_seconds": 2.0,
+                "end_seconds": 5.0,
+                "asset_type": "video",
+                "asset_path": motion,
+            },
         ],
     }
 
@@ -195,12 +260,15 @@ def test_fast_render_normalizes_once_then_stream_copies_concat_and_mux(tmp_path)
 
     with (
         patch.object(renderer, "normalize_audio", return_value=audio),
+        patch.object(renderer, "tag_preview_audio", return_value=audio),
         patch.object(
             renderer,
             "materialize_scene_sources",
             return_value=["scene-image.mp4", "scene-video.mp4"],
         ) as materialize,
-        patch.object(renderer.video, "validate_beat_cut_times", return_value=[0.0, 2.0, 5.0]),
+        patch.object(
+            renderer.video, "validate_beat_cut_times", return_value=[0.0, 2.0, 5.0]
+        ),
         patch.object(renderer, "_concat_normalized_scenes") as concat,
         patch.object(renderer, "_mux_master_audio", side_effect=fake_mux) as mux,
         patch.object(renderer.video, "combine_videos") as generic_combine,
@@ -226,21 +294,34 @@ def test_api_assemble_project_invokes_moneyprinter_assembler(tmp_path, monkeypat
     monkeypatch.setattr(video_controller.config, "root_dir", str(tmp_path))
     (tmp_path / "scripts").mkdir(parents=True)
     (tmp_path / "storage" / "temp").mkdir(parents=True)
-    (tmp_path / "scripts" / "assemble_typebeat_project.py").write_text("# fixture", encoding="utf-8")
-    response_payload = {"ok": True, "project_id": "project-free", "motion_scene_count": 10}
+    (tmp_path / "scripts" / "assemble_typebeat_project.py").write_text(
+        "# fixture", encoding="utf-8"
+    )
+    response_payload = {
+        "ok": True,
+        "project_id": "project-free",
+        "motion_scene_count": 10,
+    }
 
     def fake_run(command, **_kwargs):
         assert command[1].endswith("assemble_typebeat_project.py")
         assert command[2] == "--payload"
         payload = Path(command[3])
         assert payload.is_file()
-        return SimpleNamespace(returncode=0, stdout=__import__("json").dumps(response_payload) + "\n", stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout=__import__("json").dumps(response_payload) + "\n",
+            stderr="",
+        )
 
     request = SimpleNamespace(headers={})
     with patch.object(video_controller.subprocess, "run", side_effect=fake_run):
         result = video_controller.assemble_type_beat_project(
             request,
-            {"clip_id": "00000000-0000-0000-0000-000000000000", "motion_assets": [{}] * 10},
+            {
+                "clip_id": "00000000-0000-0000-0000-000000000000",
+                "motion_assets": [{}] * 10,
+            },
         )
     assert result["data"]["project_id"] == "project-free"
 
@@ -249,7 +330,9 @@ def test_internal_sync_render_uses_configured_output_root(tmp_path, monkeypatch)
     monkeypatch.setenv("TYPEBEAT_OUTPUT_ROOT", str(tmp_path))
     monkeypatch.setattr(video_controller.config, "root_dir", str(tmp_path))
     (tmp_path / "scripts").mkdir(parents=True)
-    (tmp_path / "scripts" / "render_typebeat_project.py").write_text("# fixture", encoding="utf-8")
+    (tmp_path / "scripts" / "render_typebeat_project.py").write_text(
+        "# fixture", encoding="utf-8"
+    )
     expected = tmp_path / "project-free" / "final" / "moneyprinterturbo-master.mp4"
 
     def fake_run(command, **_kwargs):
