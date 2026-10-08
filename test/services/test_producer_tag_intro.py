@@ -28,16 +28,10 @@ def test_tag_intro_refuses_tampered_asset(tmp_path):
             tag_preview_audio(str(tmp_path / "master.wav"), "test", tmp_path)
 
 
-def test_every_instrumental_beat_video_repeats_approved_tag_without_overwriting_master():
-    assert official_tag_drop_positions(159.0135, kind="beat") == [
-        0.8,
-        30.0,
-        60.0,
-        90.0,
-        120.0,
-        150.0,
-    ]
-    assert official_tag_drop_positions(92.075, kind="beat") == [0.8, 30.0, 60.0]
+def test_beat_video_uses_one_intro_one_very_quiet_outro():
+    assert official_tag_drop_positions(159.0135, kind="beat") == [0.8, 145.013]
+    assert official_tag_drop_positions(92.075, kind="beat") == [0.8, 78.075]
+    assert official_tag_drop_positions(25, kind="beat") == [0.8]
     assert official_tag_drop_positions(159.0135, kind="song") == []
     with pytest.raises(ValueError):
         official_tag_drop_positions(159.0, kind="album")
