@@ -478,6 +478,23 @@ def render_canonical_still_coverage_internal(request: Request, body: dict):
 
 
 @router.post(
+    "/internal/type-beat/full-motion/verify",
+    summary="Independently QA Adobe full-motion master and retain publishing hold",
+)
+def verify_full_motion_internal(request: Request, body: dict):
+    task_id=base.get_task_id(request)
+    project_id=str(body.get('project_id') or '') if isinstance(body,dict) else ''
+    if not re.fullmatch(r'[A-Za-z0-9._-]{1,100}',project_id):
+        raise HttpException(task_id=task_id,status_code=400,message="invalid project ID")
+    root=pathlib.Path(config.root_dir)
+    result=subprocess.run([sys.executable,'-m','scripts.qa_full_motion_project','--project-id',project_id],
+                          cwd=str(root),env={**os.environ,'PYTHONPATH':str(root)},text=True,capture_output=True,timeout=1200,check=False)
+    if result.returncode!=0:
+        raise HttpException(task_id=task_id,status_code=422,message="independent motion QA failed; inspect server report")
+    return utils.get_response(200,json.loads(result.stdout))
+
+
+@router.post(
     "/internal/type-beat/full-motion/assemble",
     summary="Assemble 30–50 real Adobe Firefly video scenes with canonical WAV",
 )
