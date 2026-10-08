@@ -1,4 +1,5 @@
 import json
+import uuid
 import mimetypes
 import os
 import pathlib
@@ -474,6 +475,35 @@ def render_canonical_still_coverage_internal(request: Request, body: dict):
     if result.returncode != 0:
         raise HttpException(task_id=request_id, status_code=422, message="canonical scene coverage failed; inspect source and scene state")
     return utils.get_response(200, json.loads(result.stdout))
+
+
+@router.post(
+    "/internal/type-beat/full-motion/assemble",
+    summary="Assemble 30–50 real Adobe Firefly video scenes with canonical WAV",
+)
+def assemble_full_motion_internal(request: Request, body: dict):
+    task_id = base.get_task_id(request)
+    if not isinstance(body, dict) or len(body.get("scene_video_assets", [])) not in range(30, 51):
+        raise HttpException(task_id=task_id, status_code=400, message="30–50 generated videos required")
+    if len(json.dumps(body)) > 230000:
+        raise HttpException(task_id=task_id, status_code=413, message="motion manifest too large")
+    root = pathlib.Path(config.root_dir)
+    manifest_dir = root / "storage" / "typebeat-motion-manifests"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    identifier = uuid.uuid4().hex
+    path = manifest_dir / f"{identifier}.json"
+    path.write_text(json.dumps(body), encoding="utf-8")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "scripts.assemble_full_motion_project", "--payload", str(path)],
+            cwd=str(root), env={**os.environ, "PYTHONPATH": str(root)},
+            text=True, capture_output=True, timeout=360, check=False,
+        )
+        if result.returncode != 0:
+            raise HttpException(task_id=task_id, status_code=422, message="motion assembly failed: verify rights/source, completeness and media")
+        return utils.get_response(200, json.loads(result.stdout))
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @router.post(
