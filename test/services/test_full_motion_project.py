@@ -49,3 +49,24 @@ def test_rejects_incorrect_track_identity_before_writing():
     with patch('scripts.assemble_full_motion_project.psql_rows', side_effect=[[], [['Other Beat','t','91.88','/music/audio.wav','wav_only']]]):
         with pytest.raises(ValueError,match='title must match'):
             assemble(sample())
+
+
+def test_rejects_corrupt_or_short_generated_mp4():
+    import json
+    import subprocess
+    from scripts.assemble_full_motion_project import probe_generated_motion
+    sample = {'streams':[{'codec_name':'h264','width':1280,'height':720}],
+              'format':{'duration':'0.8'}}
+    with patch('scripts.assemble_full_motion_project.subprocess.run',return_value=subprocess.CompletedProcess([],0,json.dumps(sample),'')):
+        with pytest.raises(ValueError,match='codec/resolution/duration'):
+            probe_generated_motion('/srv/data/n8n-media/store/firefly/videos/short.mp4')
+
+
+def test_accepts_valid_generated_video_probe():
+    import json
+    import subprocess
+    from scripts.assemble_full_motion_project import probe_generated_motion
+    sample={'streams':[{'codec_name':'h264','width':1280,'height':720}],
+            'format':{'duration':'5.041667'}}
+    with patch('scripts.assemble_full_motion_project.subprocess.run',return_value=subprocess.CompletedProcess([],0,json.dumps(sample),'')):
+        assert probe_generated_motion('/srv/data/n8n-media/store/firefly/videos/good.mp4')['codec']=='h264'

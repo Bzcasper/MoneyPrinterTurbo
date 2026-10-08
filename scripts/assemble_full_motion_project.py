@@ -9,10 +9,13 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import shlex
+import subprocess
 import uuid
 from pathlib import Path
 
 from scripts.assemble_typebeat_project import (
+    MEDIA_HOST,
     _q, _safe_id, beat_aligned_boundaries, psql_exec, psql_rows, remote_file_exists,
 )
 
@@ -58,6 +61,22 @@ def validate_payload(payload: dict) -> tuple[str, str, int, float, list[dict]]:
     return project_id, clip_id, count, bpm, sorted(normalized, key=lambda a:a['ordinal'])
 
 
+def probe_generated_motion(path: str) -> dict:
+    """Verify remote Firefly MP4 has playable video and adequate duration."""
+    args = ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+            '-show_entries', 'stream=codec_name,width,height:format=duration',
+            '-of', 'json', path]
+    command = (['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', MEDIA_HOST,
+                shlex.join(args)] if MEDIA_HOST else args)
+    result = subprocess.run(command, capture_output=True, text=True, timeout=35, check=True)
+    payload = json.loads(result.stdout)
+    stream = next((x for x in payload.get('streams', []) if x.get('codec_name')), None)
+    duration = float(payload.get('format', {}).get('duration') or 0)
+    if not stream or stream.get('codec_name') != 'h264' or int(stream.get('width') or 0) < 720 or int(stream.get('height') or 0) < 400 or duration < 4.5 or duration > 11:
+        raise ValueError('Firefly clip failed video codec/resolution/duration gate')
+    return {'codec': stream['codec_name'], 'width': stream['width'], 'height': stream['height'], 'duration': duration}
+
+
 def assemble(payload: dict) -> dict:
     pid, clip, count, bpm, videos = validate_payload(payload)
     if psql_rows(f'select project_id from media_video_projects where project_id={_q(pid)} limit 1;'):
@@ -78,6 +97,7 @@ def assemble(payload: dict) -> dict:
     for item in videos:
         if not remote_file_exists(item['path']):
             raise ValueError(f'video scene {item["ordinal"]} is missing from shared media store')
+        probe_generated_motion(item['path'])
     cuts = beat_aligned_boundaries(duration,bpm,count)
     style = str(payload.get('visual_style') or 'one coherent cinematic four-act story, no people')[:1300]
     projmeta = {'source_kind':provenance,'every_scene_video':True,'provider':'firefly-video','strict_unlimited':True,
