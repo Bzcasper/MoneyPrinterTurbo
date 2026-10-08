@@ -15,6 +15,7 @@ KEY = "clips/b3d59e13-4db5-42ae-91f7-1e97885f1726/audio/b3d59e13-4db5-42ae-91f7-
 PROJECT = "mvbeat_obsidian_nightclub_20261008_e2e2"
 CLIP = "b3d59e13-4db5-42ae-91f7-1e97885f1726"
 HOST = "https://scene-continuity-relay.eternaleleganceemporium.workers.dev"
+CUSTOM_HOST = "https://scene-media.aitoolpool.com"
 
 
 def signed_url(key=KEY, expiry=None):
@@ -25,6 +26,7 @@ def signed_url(key=KEY, expiry=None):
 
 def test_valid_relay_url_and_rejects_expired_or_wrong_hosts():
     validate_signed_url(signed_url(), KEY)
+    validate_signed_url(signed_url().replace(HOST, CUSTOM_HOST), KEY)
     for url in (
         signed_url().replace(HOST, "http://127.0.0.1:8080"),
         signed_url().replace(HOST, "https://evil.example"),
