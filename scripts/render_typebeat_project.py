@@ -340,6 +340,7 @@ def _render_image_motion(
 def _normalize_video_scene(
     video_path: str, output: Path, duration: float, *, threads: int = 4,
     title: str | None = None,
+    cinematic_grade: bool = False,
 ) -> str:
     width, height = VideoAspect.landscape.to_resolution()
     fps = 30
@@ -348,6 +349,9 @@ def _normalize_video_scene(
         f"crop={width}:{height},fps={fps},format=yuv420p,setpts=PTS-STARTPTS"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
+    if cinematic_grade:
+        # Slightly richer spectral highlights without destroying shadow detail.
+        vf += ",eq=contrast=1.07:saturation=1.23:gamma=1.02"
     if title is not None:
         # Textfiles eliminate text escaping and make titles reproducible in FFmpeg.
         safe_title = " ".join(str(title).split())[:100]
@@ -399,7 +403,8 @@ def materialize_scene_sources(
             output = work_dir / f"scene-{scene['ordinal']:03d}-video-motion.mp4"
             sources.append(
                 _normalize_video_scene(asset_path, output, duration, threads=threads,
-                                       title=project["title"] if scene["ordinal"] == 1 and project.get("all_motion_firefly") else None)
+                                       title=project["title"] if scene["ordinal"] == 1 and project.get("all_motion_firefly") else None,
+                                       cinematic_grade=bool(project.get("all_motion_firefly")))
             )
             continue
         output = work_dir / f"scene-{scene['ordinal']:03d}-image-motion.mp4"
