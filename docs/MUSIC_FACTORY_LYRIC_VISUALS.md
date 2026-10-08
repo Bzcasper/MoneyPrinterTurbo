@@ -22,3 +22,9 @@
 - Install the tracked drop-in at `deploy/systemd/mpt-api.service.d/10-preserve-media-workers.conf` into `~/.config/systemd/user/mpt-api.service.d/`. It sets `KillMode=process`, so a control-plane restart does not signal the active video-render child.
 - `systemctl --user daemon-reload`, verify effective `KillMode=process`, restart the API, verify the existing video PID is still live and `/api/v1/internal/type-beat/factory/status` still reports `running=true` for that job.
 - The one-minute n8n dispatcher must retain its busy check and atomic clip lease, and no rights/visual/human release gate is modified by this procedure.
+
+## Prompt fidelity and video provider refusal handling
+
+- The director must truncate prompt fields **at complete word boundaries**, preserving meaningful locations and handoffs instead of yielding malformed partial words. The October 8 `Grind Eternal` failure showed the phrase `night sky portal` shortened midword in slots 24 and 25; Adobe's upstream Firefly returned `[nsfw]` policy refusal for both. Truncation is a plausible trigger but not proven to be the sole cause; Firefly retains final moderation authority.
+- A provider's explicit safety refusal is treated as `VideoProviderPolicyError`: do not immediately retry the identical rejected request. Genuine transient 500/timeouts remain subject to the bounded retry budget, preserving the existing zero-credit-only guarantee.
+- Existing verified scene MP4s are kept on retry. The clip remains `FAILED_RETRYABLE` with the original delayed queue lease; the scheduler selects it when eligible, rather than creating a competing project. Unverified video providers remain disabled.

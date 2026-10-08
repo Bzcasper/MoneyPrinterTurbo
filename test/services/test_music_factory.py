@@ -197,3 +197,22 @@ def test_never_treat_non_approved_story_as_release_ready():
     story = build_story(candidate("song"))
     assert story["publishing_approved"] is False
     assert story["strict_image_conditioning_verified"] is False
+
+
+def test_beat_prompts_never_slice_environment_words_midtoken():
+    source = candidate("beat")
+    source["clip_id"] = "45bebfbe-5d78-41e9-a507-049a7366f209"
+    source["title"] = "Grind Eternal"
+    story = build_story(source)
+    prompts = [
+        generated_prompt(scene, story, n, "beat")
+        for n, scene in enumerate(story["scenes"], 1)
+    ]
+    assert all(len(prompt) <= 1485 for prompt in prompts)
+    # Historically the 95-character truncation produced "to nig.",
+    # which was malformed and appeared in moderation-rejected scenes.
+    for number in (24, 25):
+        prompt = prompts[number - 1]
+        assert "night sky portal" in prompt
+        assert "nig." not in prompt
+        assert "same one molten gold glass sphere" in prompt
