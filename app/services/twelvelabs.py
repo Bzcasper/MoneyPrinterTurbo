@@ -30,6 +30,7 @@ Configure a TwelveLabs API key from the TwelveLabs dashboard (https://twelvelabs
 """
 
 import math
+import os
 from contextlib import contextmanager
 from functools import lru_cache
 from typing import List, Optional
@@ -45,10 +46,27 @@ DEFAULT_PEGASUS_MODEL = "pegasus1.5"
 _PEGASUS_MIN_MAX_TOKENS = 512
 
 
+def _environment_keys() -> list[str]:
+    """Read credentials without placing them in config.app (which is persisted)."""
+    combined = os.getenv("MPT_TWELVELABS_API_KEYS", "")
+    single = os.getenv("MPT_TWELVELABS_API_KEY", "")
+    return [key.strip() for key in (combined + "," + single).split(",") if key.strip()]
+
+
 def is_enabled() -> bool:
-    """True only when at least one TwelveLabs API key is configured."""
-    keys = config.app.get("twelvelabs_api_keys")
-    return bool(keys)
+    """True only when TwelveLabs has a configured API key."""
+    return bool(_environment_keys() or config.app.get("twelvelabs_api_keys"))
+
+
+def _rerank_enabled() -> bool:
+    raw = os.environ.get("MPT_TWELVELABS_RERANK_TERMS")
+    if raw is None:
+        return bool(config.app.get("twelvelabs_rerank_terms", False))
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _model(env_key: str, app_key: str, default: str) -> str:
+    return os.getenv(env_key) or config.app.get(app_key) or default
 
 
 def _client(httpx_client=None):
@@ -56,7 +74,18 @@ def _client(httpx_client=None):
     # material.py (get_api_key rotates across configured keys).
     from twelvelabs import TwelveLabs
 
-    api_key = material.get_api_key("twelvelabs_api_keys")
+    keys = _environment_keys()
+    if keys:
+        # Existing material.get_api_key handles legacy config.toml rotation.
+        # Env credentials stay out of the WebUI's saved TOML.
+        import itertools
+
+        if not hasattr(_client, "_env_key_cycle") or getattr(_client, "_env_key_snapshot", None) != tuple(keys):
+            _client._env_key_snapshot = tuple(keys)
+            _client._env_key_cycle = itertools.cycle(keys)
+        api_key = next(_client._env_key_cycle)
+    else:
+        api_key = material.get_api_key("twelvelabs_api_keys")
     return TwelveLabs(api_key=api_key, httpx_client=httpx_client)
 
 
@@ -87,7 +116,7 @@ def embed_text(text: str, model: Optional[str] = None) -> Optional[List[float]]:
     """
     if not is_enabled() or not text or not text.strip():
         return None
-    model = model or config.app.get("twelvelabs_marengo_model", DEFAULT_MARENGO_MODEL)
+    model = model or _model("MPT_TWELVELABS_MARENGO_MODEL", "twelvelabs_marengo_model", DEFAULT_MARENGO_MODEL)
     try:
         # lru_cache only memoizes successful returns; a raised exception is not
         # cached, so a transient API error never poisons the cache.
@@ -118,7 +147,7 @@ def rerank_terms_by_subject(
     `twelvelabs_rerank_terms` is truthy. Falls back to the original order on
     any failure, so it can never make the pipeline worse.
     """
-    if not is_enabled() or not config.app.get("twelvelabs_rerank_terms"):
+    if not is_enabled() or not _rerank_enabled():
         return search_terms
     if not video_subject or len(search_terms) < 2:
         return search_terms
@@ -160,7 +189,7 @@ def analyze_clip(
     """
     if not is_enabled() or not video_url:
         return None
-    model = model or config.app.get("twelvelabs_pegasus_model", DEFAULT_PEGASUS_MODEL)
+    model = model or _model("MPT_TWELVELABS_PEGASUS_MODEL", "twelvelabs_pegasus_model", DEFAULT_PEGASUS_MODEL)
     try:
         from twelvelabs.types import VideoContext_Url
 

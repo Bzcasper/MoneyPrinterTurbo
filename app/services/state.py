@@ -7,6 +7,7 @@ from redis.exceptions import ResponseError
 from itertools import islice
 
 from app.config import config
+from app.config.runtime_integrations import redis_settings
 from app.models import const
 
 
@@ -446,11 +447,12 @@ class RedisState(BaseState):
 
 
 # Global state
-_enable_redis = config.app.get("enable_redis", False)
-_redis_host = config.app.get("redis_host", "localhost")
-_redis_port = config.app.get("redis_port", 6379)
-_redis_db = config.app.get("redis_db", 0)
-_redis_password = config.app.get("redis_password", None)
+_runtime_redis = redis_settings(config.app)
+_enable_redis = _runtime_redis["enabled"]
+_redis_host = _runtime_redis["host"]
+_redis_port = _runtime_redis["port"]
+_redis_db = _runtime_redis["db"]
+_redis_password = _runtime_redis["password"]
 
 state = (
     RedisState(
