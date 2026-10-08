@@ -262,7 +262,10 @@ def assemble(payload: dict) -> dict:
             raise ValueError(
                 f"video scene {item['ordinal']} is missing from shared media store"
             )
-        probe_generated_motion(item["path"])
+        inspected = probe_generated_motion(item["path"])
+        item["video_duration_sec"] = float(inspected["duration"])
+        item["video_width"] = int(inspected.get("width") or 1280)
+        item["video_height"] = int(inspected.get("height") or 720)
     cuts = beat_aligned_boundaries(duration, bpm, count)
     style = str(
         payload.get("visual_style")
@@ -336,14 +339,15 @@ def assemble(payload: dict) -> dict:
             "reference": "generated_video",
             "image_motion": False,
             "scene_ordinal": ordinal,
+            "source_duration_sec": item["video_duration_sec"],
             "reference_custody": "adobe_storage_previous_scene_frame",
             "reference_image_id": item["reference_image_id"],
             "next_reference_image_id": item["next_reference_image_id"],
             "final_frame_sha256": item["frame_sha256"],
             "entry_similarity": item["reference_similarity"],
         }
-        asset = "INSERT INTO media_video_assets (asset_id,project_id,scene_id,asset_type,provider,model,uri,local_path,prompt,metadata,status,asset_role,qa_status,lock_status) VALUES "
-        asset += f"({_q(aid)},{_q(pid)},{_q(sid)},'video','firefly','firefly-video',{_q(item['path'])},{_q(item['path'])},{_q(prompt)},{_q(json.dumps(meta))}::jsonb,'APPROVED','locked_video','APPROVED','LOCKED');"
+        asset = "INSERT INTO media_video_assets (asset_id,project_id,scene_id,asset_type,provider,model,uri,local_path,prompt,duration_seconds,width,height,metadata,status,asset_role,qa_status,lock_status) VALUES "
+        asset += f"({_q(aid)},{_q(pid)},{_q(sid)},'video','firefly','firefly-video',{_q(item['path'])},{_q(item['path'])},{_q(prompt)},{item['video_duration_sec']:.6f},{item['video_width']},{item['video_height']},{_q(json.dumps(meta))}::jsonb,'APPROVED','locked_video','APPROVED','LOCKED');"
         sql.extend(
             [
                 scene,
