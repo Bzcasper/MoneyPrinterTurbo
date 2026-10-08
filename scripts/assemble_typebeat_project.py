@@ -120,6 +120,47 @@ def motion_ordinals(scene_count: int) -> list[int]:
     return sorted(out)
 
 
+
+def supplied_image_assets(raw: object, scene_count: int, motion_ordinals: list[int]) -> dict[int, dict]:
+    """Validate a full set of externally generated stills before any DB mutation.
+
+    Omit `image_assets` to retain the existing motion-frame extraction fallback.
+    """
+    if raw is None:
+        return {}
+    expected = set(range(1, scene_count + 1)) - set(motion_ordinals)
+    if not isinstance(raw, list) or len(raw) != len(expected):
+        raise SystemExit(f"image_assets must contain exactly {len(expected)} stills")
+    by_ordinal: dict[int, dict] = {}
+    for item in raw:
+        if not isinstance(item, dict) or isinstance(item.get("ordinal"), bool):
+            raise SystemExit("invalid image asset record")
+        try:
+            ordinal = int(item.get("ordinal"))
+        except (TypeError, ValueError) as exc:
+            raise SystemExit("image asset ordinal is required") from exc
+        if ordinal not in expected or ordinal in by_ordinal:
+            raise SystemExit(f"unexpected or duplicate still ordinal: {ordinal}")
+        path = str(item.get("host_path") or "").strip()
+        if (
+            not path.startswith("/srv/data/n8n-media/store/")
+            or ".." in Path(path).parts
+            or Path(path).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}
+            or not remote_file_exists(path)
+        ):
+            raise SystemExit(f"still {ordinal} is missing or outside approved media store")
+        provider = str(item.get("provider") or "").strip()
+        model = str(item.get("model") or "").strip()
+        if provider not in {"firefly", "grok2api"} or not model:
+            raise SystemExit(f"still {ordinal} has unsupported or missing provider provenance")
+        by_ordinal[ordinal] = {
+            "path": path, "provider": provider, "model": model[:120],
+            "prompt": str(item.get("prompt") or "")[:6000],
+            "billing_mode": "firefly_fair_use" if provider == "firefly" else "grok2api",
+        }
+    return by_ordinal
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Assemble a canonical type-beat project from 10 free motion clips")
     ap.add_argument("--payload", required=True)
@@ -144,6 +185,13 @@ def main() -> None:
         payload.get("project_id") or f"mvbeat_{clip_id.split('-')[0]}_freevideo",
         "project_id",
     )
+    # Never replace a previously assembled project, even if a caller retries.
+    existing = psql_rows(
+        "select project_id from media_video_projects "
+        f"where project_id={_q(project_id)} limit 1;"
+    )
+    if existing:
+        raise SystemExit("project_id already exists; allocate a fresh ID to prevent media overwrite")
     source = psql_rows(
         "select a.duration_seconds,m.canonical_source_path "
         "from music_assets a join v_canonical_track_media m using (clip_id) "
@@ -171,6 +219,7 @@ def main() -> None:
 
     motion_scene_ordinals = motion_ordinals(scene_count)
     motion_by_ordinal = dict(zip(motion_scene_ordinals, normalized_motions))
+    supplied_stills = supplied_image_assets(payload.get("image_assets"), scene_count, motion_scene_ordinals)
     project_root = f"{REMOTE_MEDIA_ROOT}/{project_id}"
     still_dir = f"{project_root}/stills"
     remote_mkdir(still_dir)
@@ -180,6 +229,9 @@ def main() -> None:
         if ordinal in motion_by_ordinal:
             continue
         nearest = min(motion_scene_ordinals, key=lambda x: abs(x - ordinal))
+        if ordinal in supplied_stills:
+            image_paths[ordinal] = (supplied_stills[ordinal]["path"], nearest)
+            continue
         source_video = motion_by_ordinal[nearest]["path"]
         output = f"{still_dir}/scene-{ordinal:03d}.jpg"
         seek = 0.8 + (ordinal % 4) * 0.55
@@ -235,7 +287,7 @@ def main() -> None:
         f"({_q(project_id)},'type_beat',{_q(clip_id)}::uuid,{_q(title)},'ASSETS_READY',false,"
         f"{_q(json.dumps({'mode': 'continuous_signal_city', 'identity': 'no_character'}))}::jsonb,"
         f"{_q(json.dumps({'style': style}))}::jsonb,"
-        f"{_q(json.dumps({'provider_policy': 'free_only', 'required_motion_scenes': 10, 'scene_count': scene_count}))}::jsonb);",
+        f"{_q(json.dumps({'provider_policy': 'firefly_first_grok_fallback', 'required_motion_scenes': 10, 'scene_count': scene_count}))}::jsonb);",
         "INSERT INTO media_video_scenes "
         "(scene_id,project_id,ordinal,section_name,source_text,start_seconds,end_seconds,timeline_mode,"
         "location_key,asset_preference,visual_prompt,motion_prompt,continuity_refs,qa_requirements,status,"
@@ -249,7 +301,10 @@ def main() -> None:
         aid = f"{project_id}-motion-{ordinal:03d}"
         motion_asset_ids[ordinal] = aid
         item = motion_by_ordinal[ordinal]
-        metadata = json.dumps({"billing_mode": "free_only", "source": "n8n-free-video-router"})
+        billing = ("firefly_fair_use" if item["provider"] == "firefly"
+                   else "grok2api" if item["provider"] == "grok2api"
+                   else "unverified_free_provider")
+        metadata = json.dumps({"billing_mode": billing, "source": "n8n-media-provider-router"})
         asset_rows.append(
             f"({_q(aid)},{_q(project_id)},{_q(sid)},'video',{_q(item['provider'])},{_q(item['model'])},"
             f"{_q(item['path'])},{_q(item['path'])},{_q(item['prompt'])},{_q(metadata)}::jsonb,"
@@ -264,10 +319,17 @@ def main() -> None:
         sid = f"{project_id}-scene-{ordinal:03d}"
         aid = f"{project_id}-still-{ordinal:03d}"
         parent = motion_asset_ids[parent_ordinal]
-        prompt = f"{style}. Derived continuity frame for scene {ordinal:02d}."
-        metadata = json.dumps({"derived_from_motion_ordinal": parent_ordinal, "billing_mode": "free_only"})
+        generated = supplied_stills.get(ordinal)
+        prompt = (generated["prompt"] if generated else f"{style}. Derived continuity frame for scene {ordinal:02d}.")
+        provider = generated["provider"] if generated else "moneyprinter-frame-extract"
+        model = generated["model"] if generated else "ffmpeg-frame"
+        metadata = json.dumps({
+            "derived_from_motion_ordinal": None if generated else parent_ordinal,
+            "billing_mode": generated["billing_mode"] if generated else "free_only",
+            "source": "n8n-generated-image-router" if generated else "motion-frame-extract",
+        })
         asset_rows.append(
-            f"({_q(aid)},{_q(project_id)},{_q(sid)},'image','moneyprinter-frame-extract','ffmpeg-frame',"
+            f"({_q(aid)},{_q(project_id)},{_q(sid)},'image',{_q(provider)},{_q(model)},"
             f"{_q(path)},{_q(path)},{_q(prompt)},{_q(metadata)}::jsonb,"
             f"'APPROVED','anchor','APPROVED','LOCKED')"
         )
@@ -294,8 +356,9 @@ def main() -> None:
         "scene_count": scene_count,
         "motion_scene_count": len(motion_scene_ordinals),
         "image_scene_count": len(image_paths),
+        "generated_image_scene_count": len(supplied_stills),
         "motion_ordinals": motion_scene_ordinals,
-        "provider_policy": "free_only",
+        "provider_policy": "firefly_first_grok_fallback",
     }))
 
 
