@@ -185,6 +185,8 @@ def test_assembled_sql_preserves_ten_master_beat_references():
     assert "hero_handoff" in written
     assert "Solar Current" in written
     assert "final_frame_sha256" in written
+    assert "duration_seconds,width,height" in written
+    assert "source_duration_sec" in written
     assert "canon-001" in written
     assert "adobe_storage_previous_scene_frame" in written
 
