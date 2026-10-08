@@ -24,7 +24,7 @@ def render_canonical_motion(
     vf = (
         "scale=1536:864:force_original_aspect_ratio=increase,"
         "crop=1536:864,setsar=1,"
-        "zoompan=z='min(zoom+0.0006,1.10)':"
+        "zoompan=z='min(1+0.0012*on,1.14)':"
         "x='iw/2-(iw/zoom/2)+8*sin(on/37)':"
         "y='ih/2-(ih/zoom/2)+5*cos(on/49)':"
         f"d=1:s=1280x720:fps={fps},format=yuv420p"
