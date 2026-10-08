@@ -13,7 +13,12 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path("/home/bobby/Videos/scene-director/r2-intake")
-HOST = "scene-continuity-relay.eternaleleganceemporium.workers.dev"
+HOSTS = frozenset(
+    {
+        "scene-continuity-relay.eternaleleganceemporium.workers.dev",
+        "scene-media.aitoolpool.com",
+    }
+)
 SAFE = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 SHA = re.compile(r"^[a-f0-9]{64}$")
 OBJECT = re.compile(
@@ -33,7 +38,7 @@ def validate_signed_url(value: str, expected_key: str) -> None:
     u = urllib.parse.urlsplit(value)
     if (
         u.scheme != "https"
-        or u.hostname != HOST
+        or u.hostname not in HOSTS
         or u.port not in (None, 443)
         or u.username
         or u.password
