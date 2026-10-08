@@ -38,6 +38,6 @@ def test_every_instrumental_beat_video_repeats_approved_tag_without_overwriting_
         150.0,
     ]
     assert official_tag_drop_positions(92.075, kind="beat") == [0.8, 30.0, 60.0]
-    assert official_tag_drop_positions(159.0135, kind="song") == [0.8]
+    assert official_tag_drop_positions(159.0135, kind="song") == []
     with pytest.raises(ValueError):
         official_tag_drop_positions(159.0, kind="album")

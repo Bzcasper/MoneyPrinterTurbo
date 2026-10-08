@@ -834,7 +834,7 @@ def official_tag_drop_positions(
         raise ValueError("source audio duration must be positive")
     if kind not in {"beat", "song"}:
         raise ValueError("Invalid producer-tag media kind")
-    drops = [0.8]
+    drops = [0.8] if kind == "beat" else []
     if kind == "beat":
         mark = 30.0
         while mark < duration_seconds - 8.0:
@@ -846,7 +846,9 @@ def official_tag_drop_positions(
 def tag_preview_audio(
     audio: str, project_id: str, work_dir: Path, *, kind: str = "beat"
 ) -> str:
-    """Tag the listening preview, never modify source or buyer/licensed masters."""
+    """Tag only instrumental beat previews; vocal songs retain unmodified audio."""
+    if kind == "song":
+        return str(audio)
     tag = _materialize_remote_path(
         OFFICIAL_PRODUCER_TAG_REMOTE, project_id, "official-bc-producer-tag"
     )

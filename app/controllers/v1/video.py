@@ -45,6 +45,7 @@ from app.services import state as sm
 from app.services import task as tm
 from app.utils import file_security, utils
 
+
 def _parse_json_cli_output(stdout: str) -> dict:
     """Decode a CLI JSON envelope despite harmless app startup log lines."""
     for line in reversed(str(stdout).splitlines()):
@@ -60,6 +61,228 @@ def _parse_json_cli_output(stdout: str) -> dict:
 # 统一在 V1 视频路由入口执行鉴权。verify_token 会在 api_key 为空时
 # 保留现有免认证行为，只有管理员显式配置后才会影响客户端。
 router = new_router(dependencies=[Depends(base.verify_token)])
+
+
+def _autopilot_trusted_lan(request: Request) -> None:
+    """Schedule/API calls are private to loopback and the canonical NUC.
+    This route is deliberately not exposed through Cloudflare public domains.
+    """
+    addr = str(request.client.host) if request.client else ""
+    if addr not in {"127.0.0.1", "::1", "10.0.0.242"}:
+        raise HttpException(
+            task_id=base.get_task_id(request),
+            status_code=403,
+            message="autopilot control plane is LAN-only",
+        )
+
+
+@router.get(
+    "/internal/type-beat/autopilot/status", summary="Safe queued music pipeline status"
+)
+def autopilot_status_internal(request: Request):
+    _autopilot_trusted_lan(request)
+    from scripts.video_autopilot_queue import candidate, status
+
+    candidate(dry_run=True)
+    return utils.get_response(200, status())
+
+
+@router.get(
+    "/internal/type-beat/autopilot/approved-upload-next",
+    summary="Atomically reserve a fully approved private YouTube video",
+)
+def autopilot_approved_upload_internal(request: Request):
+    _autopilot_trusted_lan(request)
+    from scripts.video_autopilot_queue import claim_next_private_upload
+
+    return utils.get_response(200, claim_next_private_upload())
+
+
+@router.get(
+    "/internal/type-beat/autopilot/next",
+    summary="Read-only preview of next canonical beat/song",
+)
+def autopilot_next_internal(request: Request):
+    _autopilot_trusted_lan(request)
+    from scripts.video_autopilot_queue import candidate
+
+    return utils.get_response(200, candidate(dry_run=True))
+
+
+@router.post(
+    "/internal/type-beat/autopilot/claim", summary="Claim rights-cleared WAV only"
+)
+def autopilot_claim_internal(request: Request, body: dict):
+    _autopilot_trusted_lan(request)
+    from scripts.video_autopilot_queue import candidate
+
+    if body.get("execute") is not True or body.get("publishing_approved") is True:
+        raise HttpException(
+            task_id=base.get_task_id(request),
+            status_code=400,
+            message="explicit nonpublishing claim required",
+        )
+    check = candidate(dry_run=True)
+    if not check.get("has_work"):
+        return utils.get_response(200, check)
+    if check.get("rights_ready") is not True:
+        return utils.get_response(
+            200,
+            {
+                "has_work": False,
+                "reason": "rights_gate_blocked",
+                "eligible_source": check["clip_id"],
+            },
+        )
+    if check.get("source_format") != "wav":
+        return utils.get_response(
+            200,
+            {
+                "has_work": False,
+                "reason": "official_wav_required",
+                "eligible_source": check["clip_id"],
+            },
+        )
+    return utils.get_response(200, candidate(dry_run=False))
+
+
+@router.post(
+    "/internal/type-beat/autopilot/report",
+    summary="Record review-stage media generation, never auto-approve",
+)
+def autopilot_report_internal(request: Request, body: dict):
+    _autopilot_trusted_lan(request)
+    from scripts.video_autopilot_queue import record_result
+
+    result = record_result(
+        str(body.get("clip_id")),
+        stage=str(body.get("stage") or ""),
+        details=body.get("details") or {},
+    )
+    return utils.get_response(200, result)
+
+
+@router.post(
+    "/internal/type-beat/autopilot/private-upload-record",
+    summary="Register YouTube private upload after approved release gate",
+)
+def autopilot_record_private_upload_internal(request: Request, body: dict):
+    _autopilot_trusted_lan(request)
+    from scripts.video_autopilot_queue import record_private_upload
+
+    try:
+        result = record_private_upload(
+            str(body.get("clip_id") or ""), str(body.get("youtube_video_id") or "")
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HttpException(
+            task_id=base.get_task_id(request), status_code=422, message=str(exc)
+        ) from exc
+    return utils.get_response(200, result)
+
+
+@router.post(
+    "/internal/type-beat/autopilot/release-check",
+    summary="Database-enforced publication hold",
+)
+def autopilot_release_internal(request: Request, body: dict):
+    _autopilot_trusted_lan(request)
+    from scripts.video_autopilot_queue import release_check
+
+    return utils.get_response(200, release_check(str(body.get("clip_id"))))
+
+
+@router.get(
+    "/internal/type-beat/autopilot/private-upload-next",
+    summary="Select one database-approved private YouTube review upload",
+)
+def autopilot_next_private_upload_internal(request: Request):
+    _autopilot_trusted_lan(request)
+    from scripts.video_autopilot_queue import private_upload_candidates
+
+    return utils.get_response(200, private_upload_candidates())
+
+
+@router.post(
+    "/internal/type-beat/autopilot/private-upload-claim",
+    summary="Atomically reserve a verified private YouTube upload",
+)
+def autopilot_claim_private_upload_internal(request: Request, body: dict):
+    _autopilot_trusted_lan(request)
+    from scripts.video_autopilot_queue import claim_private_upload
+
+    return utils.get_response(200, claim_private_upload(str(body.get("clip_id") or "")))
+
+
+@router.get(
+    "/internal/type-beat/factory/next",
+    summary="Next verified Modal WAV for either untagged vocal song or tagged beat",
+)
+def music_factory_next_internal(request: Request):
+    _autopilot_trusted_lan(request)
+    from scripts.music_factory_catalog import next_candidate
+
+    return utils.get_response(200, next_candidate())
+
+
+@router.post(
+    "/internal/type-beat/factory/claim",
+    summary="Atomically claim a playable library clip for nonpublishing motion generation",
+)
+def music_factory_claim_internal(request: Request, body: dict):
+    _autopilot_trusted_lan(request)
+    if body.get("execute") is not True or body.get("publishing_approved") is True:
+        raise HttpException(
+            task_id=base.get_task_id(request),
+            status_code=400,
+            message="explicit unpublished draft-generation request required",
+        )
+    from scripts.music_factory_catalog import claim_draft
+
+    try:
+        result = claim_draft(str(body.get("clip_id") or ""))
+    except (ValueError, TypeError) as exc:
+        raise HttpException(
+            task_id=base.get_task_id(request), status_code=422, message=str(exc)
+        ) from exc
+    return utils.get_response(200, result)
+
+
+@router.get(
+    "/internal/type-beat/factory/status",
+    summary="Current worker health and active canonical media project",
+)
+def music_factory_status_internal(request: Request):
+    _autopilot_trusted_lan(request)
+    from scripts.music_factory_launcher import status
+
+    return utils.get_response(200, status())
+
+
+@router.post(
+    "/internal/type-beat/factory/start",
+    summary="Run one claimed music/video generation job in background",
+)
+def music_factory_start_internal(request: Request, body: dict):
+    _autopilot_trusted_lan(request)
+    from scripts.music_factory_launcher import start_job
+
+    if body.get("publishing_approved") is True or body.get("execute") is not True:
+        raise HttpException(
+            task_id=base.get_task_id(request),
+            status_code=400,
+            message="explicit, nonpublishing production request required",
+        )
+    try:
+        result = start_job(
+            body.get("claimed_item") or {}, dry_run=body.get("dry_run") is True
+        )
+    except (ValueError, TypeError) as exc:
+        raise HttpException(
+            task_id=base.get_task_id(request), status_code=422, message=str(exc)
+        ) from exc
+    return utils.get_response(200, result)
+
 
 _enable_redis = config.app.get("enable_redis", False)
 _redis_host = config.app.get("redis_host", "localhost")
@@ -109,7 +332,9 @@ def _sanitize_upload_filename(filename: str, request_id: str) -> str:
     return normalized_name
 
 
-def _resolve_path_within_directory(base_dir: str, unsafe_path: str, request_id: str) -> str:
+def _resolve_path_within_directory(
+    base_dir: str, unsafe_path: str, request_id: str
+) -> str:
     try:
         return file_security.resolve_path_within_directory(base_dir, unsafe_path)
     except ValueError as exc:
@@ -149,16 +374,18 @@ def _task_file_to_uri(file: str, endpoint: str, task_dir: str, request_id: str) 
         )
         return file
 
-    relative_path = os.path.relpath(
-        resolved_path, os.path.realpath(task_dir)
-    ).replace("\\", "/")
+    relative_path = os.path.relpath(resolved_path, os.path.realpath(task_dir)).replace(
+        "\\", "/"
+    )
     uri_path = f"tasks/{quote(relative_path, safe='/')}"
     if endpoint:
         return f"{endpoint.rstrip('/')}/{uri_path}"
     return f"/{uri_path}"
 
 
-def _task_response_data(task: dict, endpoint: str, task_dir: str, request_id: str) -> dict:
+def _task_response_data(
+    task: dict, endpoint: str, task_dir: str, request_id: str
+) -> dict:
     response_task = _public_task_data(task)
     for key in ("videos", "combined_videos"):
         if key in task:
@@ -297,12 +524,16 @@ def _run_type_beat_project_render(task_id: str, project_id: str) -> None:
     root = pathlib.Path(config.root_dir)
     script = root / "scripts" / "render_typebeat_project.py"
     output_root = pathlib.Path(
-        os.environ.get("TYPEBEAT_OUTPUT_ROOT", "/srv/data/n8n-media/store/strictlybeats")
+        os.environ.get(
+            "TYPEBEAT_OUTPUT_ROOT", "/srv/data/n8n-media/store/strictlybeats"
+        )
     )
     output = output_root / project_id / "final" / "moneyprinterturbo-master.mp4"
     env = os.environ.copy()
     env["PYTHONPATH"] = str(root)
-    sm.state.patch_task(task_id, progress=5, project_id=project_id, output_path=str(output))
+    sm.state.patch_task(
+        task_id, progress=5, project_id=project_id, output_path=str(output)
+    )
     try:
         result = subprocess.run(
             [sys.executable, str(script), project_id, "--output", str(output)],
@@ -314,7 +545,9 @@ def _run_type_beat_project_render(task_id: str, project_id: str) -> None:
             check=False,
         )
         if result.returncode != 0 or not output.is_file():
-            detail = (result.stderr or result.stdout or "type-beat render failed").strip()[-4000:]
+            detail = (
+                result.stderr or result.stdout or "type-beat render failed"
+            ).strip()[-4000:]
             sm.state.patch_task(
                 task_id,
                 state=const.TASK_STATE_FAILED,
@@ -391,7 +624,9 @@ def assemble_type_beat_project(request: Request, body: dict):
             check=False,
         )
         if result.returncode != 0:
-            detail = (result.stderr or result.stdout or "type-beat assembly failed").strip()[-4000:]
+            detail = (
+                result.stderr or result.stdout or "type-beat assembly failed"
+            ).strip()[-4000:]
             raise HttpException(
                 task_id=request_id,
                 status_code=422,
@@ -432,26 +667,53 @@ def render_canonical_still_motion_internal(request: Request, body: dict):
         slot = int(slot)
         duration = float(duration)
     except (TypeError, ValueError) as exc:
-        raise HttpException(task_id=request_id, status_code=400, message="invalid slot/duration") from exc
-    if (not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id)
-            or not host_path.startswith("/srv/data/n8n-media/store/")
-            or ".." in pathlib.Path(host_path).parts
-            or pathlib.Path(host_path).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}
-            or not 1 <= slot <= 10 or not 2 <= duration <= 10):
-        raise HttpException(task_id=request_id, status_code=400, message="untrusted canonical image input")
+        raise HttpException(
+            task_id=request_id, status_code=400, message="invalid slot/duration"
+        ) from exc
+    if (
+        not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id)
+        or not host_path.startswith("/srv/data/n8n-media/store/")
+        or ".." in pathlib.Path(host_path).parts
+        or pathlib.Path(host_path).suffix.lower()
+        not in {".png", ".jpg", ".jpeg", ".webp"}
+        or not 1 <= slot <= 10
+        or not 2 <= duration <= 10
+    ):
+        raise HttpException(
+            task_id=request_id,
+            status_code=400,
+            message="untrusted canonical image input",
+        )
     root = pathlib.Path(config.root_dir)
     env = os.environ.copy()
     env["PYTHONPATH"] = str(root)
     result = subprocess.run(
-        [sys.executable, "-m", "scripts.canonical_still_motion_bridge",
-         "--host-path", host_path, "--project-id", project_id,
-         "--slot", str(slot), "--duration", str(duration)],
-        cwd=str(root), env=env, text=True, capture_output=True, timeout=240,
+        [
+            sys.executable,
+            "-m",
+            "scripts.canonical_still_motion_bridge",
+            "--host-path",
+            host_path,
+            "--project-id",
+            project_id,
+            "--slot",
+            str(slot),
+            "--duration",
+            str(duration),
+        ],
+        cwd=str(root),
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=240,
         check=False,
     )
     if result.returncode != 0:
-        raise HttpException(task_id=request_id, status_code=422,
-                            message="canonical image-motion render failed; verify source and slot state")
+        raise HttpException(
+            task_id=request_id,
+            status_code=422,
+            message="canonical image-motion render failed; verify source and slot state",
+        )
     return utils.get_response(200, _parse_json_cli_output(result.stdout))
 
 
@@ -462,30 +724,58 @@ def render_canonical_still_motion_internal(request: Request, body: dict):
 def render_canonical_still_coverage_internal(request: Request, body: dict):
     request_id = base.get_task_id(request)
     if not isinstance(body, dict):
-        raise HttpException(task_id=request_id, status_code=400, message="object required")
+        raise HttpException(
+            task_id=request_id, status_code=400, message="object required"
+        )
     project_id = str(body.get("project_id") or "")
     host_path = str(body.get("host_path") or "")
     try:
         ordinal = int(body.get("ordinal"))
         variant = int(body.get("variant", 0))
     except (TypeError, ValueError) as exc:
-        raise HttpException(task_id=request_id, status_code=400, message="invalid ordinal/variant") from exc
-    if (not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id)
-            or not host_path.startswith("/srv/data/n8n-media/store/")
-            or ".." in pathlib.Path(host_path).parts
-            or pathlib.Path(host_path).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}
-            or not 1 <= ordinal <= 50 or not 0 <= variant <= 9):
-        raise HttpException(task_id=request_id, status_code=400, message="untrusted canonical coverage input")
+        raise HttpException(
+            task_id=request_id, status_code=400, message="invalid ordinal/variant"
+        ) from exc
+    if (
+        not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id)
+        or not host_path.startswith("/srv/data/n8n-media/store/")
+        or ".." in pathlib.Path(host_path).parts
+        or pathlib.Path(host_path).suffix.lower()
+        not in {".png", ".jpg", ".jpeg", ".webp"}
+        or not 1 <= ordinal <= 50
+        or not 0 <= variant <= 9
+    ):
+        raise HttpException(
+            task_id=request_id,
+            status_code=400,
+            message="untrusted canonical coverage input",
+        )
     root = pathlib.Path(config.root_dir)
     env = os.environ.copy()
     env["PYTHONPATH"] = str(root)
     result = subprocess.run(
-        [sys.executable, "-c", "import json,sys; from scripts.canonical_still_motion_bridge import derive_scene_still; print(json.dumps(derive_scene_still(sys.argv[1],sys.argv[2],int(sys.argv[3]),int(sys.argv[4]))))",
-         host_path, project_id, str(ordinal), str(variant)],
-        cwd=str(root), env=env, text=True, capture_output=True, timeout=240, check=False,
+        [
+            sys.executable,
+            "-c",
+            "import json,sys; from scripts.canonical_still_motion_bridge import derive_scene_still; print(json.dumps(derive_scene_still(sys.argv[1],sys.argv[2],int(sys.argv[3]),int(sys.argv[4]))))",
+            host_path,
+            project_id,
+            str(ordinal),
+            str(variant),
+        ],
+        cwd=str(root),
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=240,
+        check=False,
     )
     if result.returncode != 0:
-        raise HttpException(task_id=request_id, status_code=422, message="canonical scene coverage failed; inspect source and scene state")
+        raise HttpException(
+            task_id=request_id,
+            status_code=422,
+            message="canonical scene coverage failed; inspect source and scene state",
+        )
     return utils.get_response(200, _parse_json_cli_output(result.stdout))
 
 
@@ -494,16 +784,35 @@ def render_canonical_still_coverage_internal(request: Request, body: dict):
     summary="Independently QA Adobe full-motion master and retain publishing hold",
 )
 def verify_full_motion_internal(request: Request, body: dict):
-    task_id=base.get_task_id(request)
-    project_id=str(body.get('project_id') or '') if isinstance(body,dict) else ''
-    if not re.fullmatch(r'[A-Za-z0-9._-]{1,100}',project_id):
-        raise HttpException(task_id=task_id,status_code=400,message="invalid project ID")
-    root=pathlib.Path(config.root_dir)
-    result=subprocess.run([sys.executable,'-m','scripts.qa_full_motion_project','--project-id',project_id],
-                          cwd=str(root),env={**os.environ,'PYTHONPATH':str(root)},text=True,capture_output=True,timeout=1200,check=False)
-    if result.returncode!=0:
-        raise HttpException(task_id=task_id,status_code=422,message="independent motion QA failed; inspect server report")
-    return utils.get_response(200,_parse_json_cli_output(result.stdout))
+    task_id = base.get_task_id(request)
+    project_id = str(body.get("project_id") or "") if isinstance(body, dict) else ""
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id):
+        raise HttpException(
+            task_id=task_id, status_code=400, message="invalid project ID"
+        )
+    root = pathlib.Path(config.root_dir)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.qa_full_motion_project",
+            "--project-id",
+            project_id,
+        ],
+        cwd=str(root),
+        env={**os.environ, "PYTHONPATH": str(root)},
+        text=True,
+        capture_output=True,
+        timeout=1200,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise HttpException(
+            task_id=task_id,
+            status_code=422,
+            message="independent motion QA failed; inspect server report",
+        )
+    return utils.get_response(200, _parse_json_cli_output(result.stdout))
 
 
 @router.post(
@@ -512,10 +821,16 @@ def verify_full_motion_internal(request: Request, body: dict):
 )
 def assemble_full_motion_internal(request: Request, body: dict):
     task_id = base.get_task_id(request)
-    if not isinstance(body, dict) or len(body.get("scene_video_assets", [])) not in range(30, 51):
-        raise HttpException(task_id=task_id, status_code=400, message="30–50 generated videos required")
+    if not isinstance(body, dict) or len(
+        body.get("scene_video_assets", [])
+    ) not in range(30, 51):
+        raise HttpException(
+            task_id=task_id, status_code=400, message="30–50 generated videos required"
+        )
     if len(json.dumps(body)) > 230000:
-        raise HttpException(task_id=task_id, status_code=413, message="motion manifest too large")
+        raise HttpException(
+            task_id=task_id, status_code=413, message="motion manifest too large"
+        )
     root = pathlib.Path(config.root_dir)
     manifest_dir = root / "storage" / "typebeat-motion-manifests"
     manifest_dir.mkdir(parents=True, exist_ok=True)
@@ -524,12 +839,26 @@ def assemble_full_motion_internal(request: Request, body: dict):
     path.write_text(json.dumps(body), encoding="utf-8")
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "scripts.assemble_full_motion_project", "--payload", str(path)],
-            cwd=str(root), env={**os.environ, "PYTHONPATH": str(root)},
-            text=True, capture_output=True, timeout=360, check=False,
+            [
+                sys.executable,
+                "-m",
+                "scripts.assemble_full_motion_project",
+                "--payload",
+                str(path),
+            ],
+            cwd=str(root),
+            env={**os.environ, "PYTHONPATH": str(root)},
+            text=True,
+            capture_output=True,
+            timeout=360,
+            check=False,
         )
         if result.returncode != 0:
-            raise HttpException(task_id=task_id, status_code=422, message="motion assembly failed: verify rights/source, completeness and media")
+            raise HttpException(
+                task_id=task_id,
+                status_code=422,
+                message="motion assembly failed: verify rights/source, completeness and media",
+            )
         return utils.get_response(200, _parse_json_cli_output(result.stdout))
     finally:
         path.unlink(missing_ok=True)
@@ -551,6 +880,7 @@ def inspect_private_r2_media_internal(request: Request, body: dict):
     task_id = base.get_task_id(request)
     try:
         from scripts.r2_media_intake import fetch_verified_media
+
         result = fetch_verified_media(
             signed_url=str(body.get("signed_url") or ""),
             asset_key=str(body.get("asset_key") or ""),
@@ -561,8 +891,11 @@ def inspect_private_r2_media_internal(request: Request, body: dict):
     except (ValueError, TypeError) as exc:
         raise HttpException(task_id=task_id, status_code=422, message=str(exc)) from exc
     except (OSError, subprocess.SubprocessError) as exc:
-        raise HttpException(task_id=task_id, status_code=503,
-                            message="R2 signed media import or FFprobe unavailable") from exc
+        raise HttpException(
+            task_id=task_id,
+            status_code=503,
+            message="R2 signed media import or FFprobe unavailable",
+        ) from exc
     return utils.get_response(200, result)
 
 
@@ -574,9 +907,12 @@ def resolve_scene_reference_internal(request: Request, body: dict):
     task_id = base.get_task_id(request)
     try:
         from scripts.scene_reference_handoff import resolve_previous
+
         result = resolve_previous(
-            str(body.get("project_id") or ""), body.get("slot"),
-            str(body.get("prompt") or ""), float(body.get("duration") or 5),
+            str(body.get("project_id") or ""),
+            body.get("slot"),
+            str(body.get("prompt") or ""),
+            float(body.get("duration") or 5),
         )
     except (ValueError, TypeError, OSError, KeyError) as exc:
         raise HttpException(task_id=task_id, status_code=422, message=str(exc)) from exc
@@ -591,14 +927,19 @@ def register_scene_reference_internal(request: Request, body: dict):
     task_id = base.get_task_id(request)
     try:
         from scripts.scene_reference_handoff import register_scene
+
         result = register_scene(
-            str(body.get("project_id") or ""), body.get("scene_result") or {},
+            str(body.get("project_id") or ""),
+            body.get("scene_result") or {},
         )
     except (ValueError, TypeError, OSError, KeyError) as exc:
         raise HttpException(task_id=task_id, status_code=422, message=str(exc)) from exc
     except subprocess.SubprocessError as exc:
-        raise HttpException(task_id=task_id, status_code=503,
-                            message="Firefly frame extraction unavailable") from exc
+        raise HttpException(
+            task_id=task_id,
+            status_code=503,
+            message="Firefly frame extraction unavailable",
+        ) from exc
     return utils.get_response(200, result)
 
 
@@ -612,13 +953,17 @@ def preflight_modal_wav_internal(request: Request, body: dict):
     title = str(body.get("title") or "").strip() if isinstance(body, dict) else ""
     try:
         from scripts.modal_wav_preflight import verify_song
+
         result = verify_song(clip_id, title)
     except ValueError as exc:
-        raise HttpException(task_id=task_id,status_code=422,message=str(exc)) from exc
+        raise HttpException(task_id=task_id, status_code=422, message=str(exc)) from exc
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-        raise HttpException(task_id=task_id,status_code=503,
-                            message="Modal WAV catalog preflight failed; media generation held") from exc
-    return utils.get_response(200,result)
+        raise HttpException(
+            task_id=task_id,
+            status_code=503,
+            message="Modal WAV catalog preflight failed; media generation held",
+        ) from exc
+    return utils.get_response(200, result)
 
 
 @router.post(
@@ -631,19 +976,36 @@ def render_modal_motion_internal(
     body: dict | None = None,
 ):
     task_id = base.get_task_id(request)
-    if body is None or body.get("modal_render") is not True or body.get("publishing_approved") is True:
-        raise HttpException(task_id=task_id, status_code=400, message="explicit Modal render request required")
+    if (
+        body is None
+        or body.get("modal_render") is not True
+        or body.get("publishing_approved") is True
+    ):
+        raise HttpException(
+            task_id=task_id,
+            status_code=400,
+            message="explicit Modal render request required",
+        )
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id):
-        raise HttpException(task_id=task_id, status_code=400, message="invalid project ID")
+        raise HttpException(
+            task_id=task_id, status_code=400, message="invalid project ID"
+        )
     try:
         from scripts.modal_motion_gateway import render_modal
-        result = render_modal(project_id, width=int(body.get("width",1920)),
-                              height=int(body.get("height",1080)))
+
+        result = render_modal(
+            project_id,
+            width=int(body.get("width", 1920)),
+            height=int(body.get("height", 1080)),
+        )
     except (ValueError, TypeError) as exc:
         raise HttpException(task_id=task_id, status_code=422, message=str(exc)) from exc
     except subprocess.TimeoutExpired as exc:
-        raise HttpException(task_id=task_id, status_code=504,
-                            message="Modal render exceeded worker timeout; check ROG job state") from exc
+        raise HttpException(
+            task_id=task_id,
+            status_code=504,
+            message="Modal render exceeded worker timeout; check ROG job state",
+        ) from exc
     except RuntimeError as exc:
         raise HttpException(task_id=task_id, status_code=503, message=str(exc)) from exc
     return utils.get_response(200, result)
@@ -655,16 +1017,22 @@ def render_modal_motion_internal(
 )
 def verify_modal_motion_internal(request: Request, body: dict):
     task_id = base.get_task_id(request)
-    project_id = str(body.get("project_id") or "") if isinstance(body,dict) else ""
+    project_id = str(body.get("project_id") or "") if isinstance(body, dict) else ""
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id):
-        raise HttpException(task_id=task_id,status_code=400,message="invalid project ID")
+        raise HttpException(
+            task_id=task_id, status_code=400, message="invalid project ID"
+        )
     try:
         from scripts.qa_modal_motion_project import verify
+
         result = verify(project_id)
     except (ValueError, OSError, KeyError, subprocess.SubprocessError) as exc:
-        raise HttpException(task_id=task_id, status_code=422,
-                            message="Modal motion QA failed: " + str(exc)[-500:]) from exc
-    return utils.get_response(200,result)
+        raise HttpException(
+            task_id=task_id,
+            status_code=422,
+            message="Modal motion QA failed: " + str(exc)[-500:],
+        ) from exc
+    return utils.get_response(200, result)
 
 
 @router.post(
@@ -686,7 +1054,9 @@ def render_type_beat_project_internal_sync(
     root = pathlib.Path(config.root_dir)
     script = root / "scripts" / "render_typebeat_project.py"
     output_root = pathlib.Path(
-        os.environ.get("TYPEBEAT_OUTPUT_ROOT", "/srv/data/n8n-media/store/strictlybeats")
+        os.environ.get(
+            "TYPEBEAT_OUTPUT_ROOT", "/srv/data/n8n-media/store/strictlybeats"
+        )
     )
     output = output_root / project_id / "final" / "moneyprinterturbo-master.mp4"
     env = os.environ.copy()
@@ -716,7 +1086,9 @@ def render_type_beat_project_internal_sync(
         ) from exc
 
     if result.returncode != 0 or not output.is_file():
-        detail = (result.stderr or result.stdout or "type-beat render failed").strip()[-4000:]
+        detail = (result.stderr or result.stdout or "type-beat render failed").strip()[
+            -4000:
+        ]
         raise HttpException(
             task_id=request_id,
             status_code=422,
@@ -785,7 +1157,6 @@ def get_all_tasks(
         "page_size": page_size,
     }
     return utils.get_response(200, response)
-
 
 
 @router.get(
@@ -861,7 +1232,9 @@ def get_bgm_list(request: Request):
         try:
             size = os.path.getsize(file)
         except OSError as exc:
-            logger.warning(f"skip unavailable background music: name={filename}, error={exc}")
+            logger.warning(
+                f"skip unavailable background music: name={filename}, error={exc}"
+            )
             continue
         bgm_list.append(
             {
@@ -919,8 +1292,11 @@ def upload_bgm_file(request: Request, file: UploadFile = File(...)):
     response = {"file": safe_filename}
     return utils.get_response(200, response)
 
+
 @router.get(
-    "/video_materials", response_model=VideoMaterialRetrieveResponse, summary="Retrieve local video materials"
+    "/video_materials",
+    response_model=VideoMaterialRetrieveResponse,
+    summary="Retrieve local video materials",
 )
 def get_video_materials_list(request: Request):
     allowed_suffixes = material_upload_service.SUPPORTED_MATERIAL_EXTENSIONS
@@ -969,8 +1345,7 @@ def upload_video_material_file(request: Request, file: UploadFile = File(...)):
         )
     except material_upload_service.MaterialUploadError as exc:
         logger.warning(
-            f"local material upload rejected: request_id={request_id}, "
-            f"error={str(exc)}"
+            f"local material upload rejected: request_id={request_id}, error={str(exc)}"
         )
         raise HttpException(
             task_id=request_id,
@@ -979,8 +1354,7 @@ def upload_video_material_file(request: Request, file: UploadFile = File(...)):
         )
     except material_upload_service.MaterialServiceError as exc:
         logger.error(
-            f"local material upload failed: request_id={request_id}, "
-            f"error={str(exc)}"
+            f"local material upload failed: request_id={request_id}, error={str(exc)}"
         )
         raise HttpException(
             task_id=request_id,
@@ -990,6 +1364,7 @@ def upload_video_material_file(request: Request, file: UploadFile = File(...)):
 
     response = {"file": stored_filename}
     return utils.get_response(200, response)
+
 
 @router.get("/stream/{file_path:path}")
 async def stream_video(request: Request, file_path: str):
