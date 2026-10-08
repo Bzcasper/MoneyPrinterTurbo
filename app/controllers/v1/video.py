@@ -405,6 +405,44 @@ def assemble_type_beat_project(request: Request, body: dict):
 
 
 @router.post(
+    "/internal/type-beat/canonical-image-motion",
+    summary="Trusted-LAN cinematic camera motion from a canonical still",
+)
+def render_canonical_still_motion_internal(request: Request, body: dict):
+    """This is exact-image camera motion, never unverified generative I2V."""
+    request_id = base.get_task_id(request)
+    project_id = str(body.get("project_id") or "") if isinstance(body, dict) else ""
+    host_path = str(body.get("host_path") or "") if isinstance(body, dict) else ""
+    slot = body.get("slot") if isinstance(body, dict) else None
+    duration = body.get("duration", 5) if isinstance(body, dict) else None
+    try:
+        slot = int(slot)
+        duration = float(duration)
+    except (TypeError, ValueError) as exc:
+        raise HttpException(task_id=request_id, status_code=400, message="invalid slot/duration") from exc
+    if (not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id)
+            or not host_path.startswith("/srv/data/n8n-media/store/")
+            or ".." in pathlib.Path(host_path).parts
+            or pathlib.Path(host_path).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}
+            or not 1 <= slot <= 10 or not 2 <= duration <= 10):
+        raise HttpException(task_id=request_id, status_code=400, message="untrusted canonical image input")
+    root = pathlib.Path(config.root_dir)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root)
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.canonical_still_motion_bridge",
+         "--host-path", host_path, "--project-id", project_id,
+         "--slot", str(slot), "--duration", str(duration)],
+        cwd=str(root), env=env, text=True, capture_output=True, timeout=240,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise HttpException(task_id=request_id, status_code=422,
+                            message="canonical image-motion render failed; verify source and slot state")
+    return utils.get_response(200, json.loads(result.stdout))
+
+
+@router.post(
     "/internal/type-beat/projects/assemble",
     summary="Trusted-LAN type-beat project assembly",
 )
