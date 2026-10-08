@@ -32,3 +32,38 @@ Restart during a controlled handoff: `XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSIO
 - Runtime credentials are deliberately **not** inserted into config.app, because WebUI `save_config()` persists it to TOML.
 - No public YouTube upload, rights gate or human/visual QA gate is changed by these integrations.
 - Redis AOF contains task state and can hold private task metadata; back it up with the same privacy controls as the rest of the production system.
+
+
+## Private video QA (explicit, opt-in)
+
+TwelveLabs supports **direct local MP4 asset uploads** (up to 200 MB) and Pegasus analysis by reusable asset ID. This allows review without exposing a private video on a public URL. The SDK supports `VideoContext_AssetId` and synchronous `client.analyze` with `pegasus1.5` (SDK 1.2.8). Do not assume that a model-generated description is human visual approval.
+
+Offline, no API key, no upload, no charge:
+
+```bash
+cd /home/bobby/projects/MoneyPrinterTurbo
+.venv/bin/python -m scripts.twelvelabs_private_review \
+  --video /home/bobby/Videos/scene-director/automatic/autovideo_caf9188877ba40adbf57d627b4f39c8f/final/autovideo_caf9188877ba40adbf57d627b4f39c8f-review.mp4
+```
+
+The offline smoke test verified that real private review video as a 64,345,478-byte, 195.75-second MP4 with SHA-256 `f5fed78ae42796e6d014112118da17bca107b804204a7ab042a46a153c0c7899`.
+
+**Only after a valid TwelveLabs API key is supplied and you approve usage:**
+
+```bash
+cd /home/bobby/projects/MoneyPrinterTurbo
+set -a
+. /home/bobby/.config/mpt-redis/mpt-twelvelabs.env
+set +a
+.venv/bin/python -m scripts.twelvelabs_private_review \
+  --video /home/bobby/Videos/scene-director/automatic/autovideo_caf9188877ba40adbf57d627b4f39c8f/final/autovideo_caf9188877ba40adbf57d627b4f39c8f-review.mp4 \
+  --allow-remote-upload
+```
+
+`--allow-remote-upload` is **required** even when credentials exist; this will send private copyrighted media and potentially lyric excerpts to TwelveLabs and may use a free quota or incur billable usage. The action is never invoked by the hourly music-video scheduler. The tool rejects MP4s outside the local factory directory, rejects files larger than 200 MB and durations outside 4 seconds to 1 hour, and checks for a configured API key before contacting the SDK. On successful upload it immediately saves the asset ID to a per-video private report (0600); future retries reuse that asset instead of uploading again. Once the same SHA-verified video and review prompt are analyzed, repeat calls reuse the completed report instead of calling the API again.
+
+For original lyric songs, the review prompt includes the thirty ordered canonical lyric excerpts from `story.json` as **untrusted reference evidence**. It asks Pegasus to report visible correspondence to lyrics, inconsistent people/outfits/locations, and unwanted text. Pegasus does not receive authority to approve creative QA or public publishing, and both flags stay explicitly false. If TwelveLabs has no key, `--allow-remote-upload` must fail before upload or billing. An actual authenticated TwelveLabs request has **not yet been completed**.
+
+Official API references:
+- https://docs.twelvelabs.io/sdk-reference/python/upload-files/direct-uploads
+- https://docs.twelvelabs.io/docs/guides/analyze-videos-and-images/videos
