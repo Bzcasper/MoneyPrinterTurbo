@@ -12,6 +12,11 @@ from pathlib import Path
 import re
 import time
 import urllib.request
+import urllib.error
+
+class VideoProviderPolicyError(RuntimeError):
+    """Explicit provider refusal. Never retry the identical rejected prompt."""
+
 
 PROVIDERS = ("firefly", "grok2api", "metaai", "qwenapi")
 HEALTH = Path("/home/bobby/.cache/scene-continuity/video-provider-health.json")
@@ -81,8 +86,16 @@ def request_video(provider: str, prompt: str, slot: int, timeout: int = 360) -> 
         ENDPOINTS[provider], data=payload, method="POST",
         headers={"Content-Type": "application/json", "Accept": "application/json"}
     )
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        result = json.load(response)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            result = json.load(response)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(4096).decode("utf-8", errors="replace")
+        if re.search(r"\[nsfw\]|considered unsafe|content.policy|safety.filter", detail, re.I):
+            raise VideoProviderPolicyError(
+                "Video provider refused the prompt under its content policy"
+            ) from exc
+        raise
     return result.get("data", result) if isinstance(result, dict) else {}
 
 

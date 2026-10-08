@@ -130,6 +130,17 @@ def moving(path: Path) -> bool:
     return diff > 0.008
 
 
+def _prompt_words(value: object, max_chars: int) -> str:
+    """Never create ambiguous or unsafe fragments by slicing words in half."""
+    text = " ".join(str(value).split())
+    if len(text) <= max_chars:
+        return text
+    chunks = text[:max_chars].rsplit(" ", 1)
+    if len(chunks) < 2:
+        raise ValueError("Prompt field contains a word beyond the provider limit")
+    return chunks[0].rstrip(" ,.;:-")
+
+
 def generated_prompt(scene: dict, treatment: dict, slot: int, kind: str) -> str:
     if kind == "song":
         from scripts.music_factory_lyrics_story import NEGATIVES
@@ -142,12 +153,12 @@ def generated_prompt(scene: dict, treatment: dict, slot: int, kind: str) -> str:
         fragments = [
             f"SHOT {slot:02d}/30; LYRIC BEAT {scene['master_beat']}/10.",
             str(treatment["character_bible"]),
-            f"SUNG LYRIC (evidence, do not show text): '{source_line[:170]}'.",
+            f"SUNG LYRIC (evidence, do not show text): '{_prompt_words(source_line, 170)}'.",
             "ACTION: enact the sung lyric as a concrete on-camera event or grounded metaphor, with the exact subject, action and object it names.",
-            f"LOCATION FROM LYRICS: {str(scene['location'])[:118]}.",
-            f"CAMERA: {str(scene['camera'])[:95]}.",
-            f"BEGINS: {str(scene['opening_state'])[:100]}.",
-            f"ENDS: {str(scene['end_state'])[:100]}.",
+            f"LOCATION FROM LYRICS: {_prompt_words(scene['location'], 118)}.",
+            f"CAMERA: {_prompt_words(scene['camera'], 95)}.",
+            f"BEGINS: {_prompt_words(scene['opening_state'], 100)}.",
+            f"ENDS: {_prompt_words(scene['end_state'], 100)}.",
             "The song's words drive every action. Same protagonist and objects, actual moving film shot, no subtitles, no abstract visualizer, no unrelated scene.",
             NEGATIVES,
         ]
@@ -157,22 +168,17 @@ def generated_prompt(scene: dict, treatment: dict, slot: int, kind: str) -> str:
         return result
     fragments = [
         f"SCENE {slot:02d}/30; ACT {scene['master_beat']}/10.",
-        f"EPISODE STORY: {str(treatment['thesis'])[:103]}.",
-        f"SAME PHYSICAL CANON: {str(treatment['motif'])[:91]}.",
-        f"PREVIOUS FRAME: {str(scene['opening_state'])[:95]}.",
-        f"NATIVE VIDEO ACTION: {str(scene['action'])[:145]}.",
-        f"SET: {str(scene['location'])[:90]}. CAMERA: {str(scene['camera'])[:95]}.",
-        f"PHYSICAL RHYTHM: {str(scene.get('music_reaction', 'natural parallax and physical light response'))[:120]}.",
-        f"NEXT FRAME: {str(scene['end_state'])[:95]}.",
-        f"LIGHTING: {str(treatment.get('lighting', ''))[:92]}.",
+        f"EPISODE STORY: {_prompt_words(treatment['thesis'], 72)}.",
+        f"SAME PHYSICAL CANON: {_prompt_words(treatment['motif'], 98)}.",
+        f"PREVIOUS FRAME: {_prompt_words(scene['opening_state'], 135)}.",
+        f"NATIVE VIDEO ACTION: {_prompt_words(scene['action'], 180)}.",
+        f"SET: {_prompt_words(scene['location'], 75)}. CAMERA: {_prompt_words(scene['camera'], 95)}.",
+        f"PHYSICAL RHYTHM: {_prompt_words(scene.get('music_reaction', 'natural parallax and physical light response'), 95)}.",
+        f"NEXT FRAME: {_prompt_words(scene['end_state'], 135)}.",
+        f"LIGHTING: {_prompt_words(treatment.get('lighting', ''), 85)}.",
         "Real moving 5-second shot; physical parallax, no freeze, montage, text, logo, WebGL or equalizer.",
         "Negative constraints: no face drift, no changing facial features, no hairstyle changes, no outfit changes, no age changes, no body proportion changes, no art style shift, no unintended photorealism/3D shift, no extra limbs, no distorted hands, no inconsistent colors, no random accessories, no changed eye color, no altered silhouette.",
     ]
-    if kind == "song":
-        fragments.insert(
-            3,
-            "BC TRAP GOD song. No invented performer or character identity.",
-        )
     result = " ".join(fragments)
     if len(result) > 1485:
         raise ValueError(
@@ -300,7 +306,7 @@ def video_scene(
     slot: int, scene: dict, treatment: dict, folder: Path, kind: str
 ) -> dict:
     from scripts.music_factory_provider_router import (
-        request_video, validated_path, scene_provider_order
+        request_video, validated_path, scene_provider_order, VideoProviderPolicyError
     )
 
     target = folder / "scenes" / f"scene-{slot:03d}.mp4"
@@ -350,6 +356,9 @@ def video_scene(
                 partial.unlink(missing_ok=True)
                 error = f"{provider}:{type(exc).__name__}:{str(exc)[:130]}"
                 errors.append(error)
+                if isinstance(exc, VideoProviderPolicyError):
+                    print(f"VIDEO_PROVIDER_POLICY_HOLD {slot} {provider}", flush=True)
+                    break
                 print(f"VIDEO_PROVIDER_RETRY {slot} {error}", flush=True)
                 time.sleep(3 * (attempt + 1))
     raise RuntimeError(f"scene {slot} failed: {'; '.join(errors)[-350:]}")

@@ -1,9 +1,13 @@
 """Free video provider routing and signed motion-receipt regressions."""
+import io
 import json
+import urllib.error
+from unittest.mock import patch
 import pytest
 
 from scripts.music_factory_provider_router import (
-    provider_request, scene_provider_order, validated_path, verified_providers
+    provider_request, scene_provider_order, validated_path, verified_providers,
+    request_video, VideoProviderPolicyError
 )
 
 
@@ -47,3 +51,23 @@ def test_receipt_requires_stored_video_and_firefly_fair_use():
     with pytest.raises(ValueError):
         validated_path("metaai", {"success": False,
             "host_path": "/srv/data/n8n-media/store/meta/videos/output.mp4"}, slot=12)
+
+
+def test_explicit_content_refusal_is_not_misreported_as_generic_500():
+    refusal = urllib.error.HTTPError(
+        "https://example.invalid/video", 500, "Internal server error", {},
+        io.BytesIO(b'{"message":"[nsfw] The provided prompt is considered unsafe."}'),
+    )
+    with patch("scripts.music_factory_provider_router.urllib.request.urlopen", side_effect=refusal):
+        with pytest.raises(VideoProviderPolicyError, match="content policy"):
+            request_video("firefly", "A harmless original cinematic landscape", 25)
+
+
+def test_unrelated_500_stays_retryable():
+    error = urllib.error.HTTPError(
+        "https://example.invalid/video", 500, "Server Error", {},
+        io.BytesIO(b'{"message":"upstream signer timeout"}'),
+    )
+    with patch("scripts.music_factory_provider_router.urllib.request.urlopen", side_effect=error):
+        with pytest.raises(urllib.error.HTTPError):
+            request_video("firefly", "A cinematic landscape", 25)
