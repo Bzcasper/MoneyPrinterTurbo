@@ -544,6 +544,42 @@ def assemble_type_beat_project_internal(request: Request, body: dict):
 
 
 @router.post(
+    "/internal/type-beat/scene-reference/resolve",
+    summary="Find the exact previous Firefly final-frame Adobe reference for the next moving scene",
+)
+def resolve_scene_reference_internal(request: Request, body: dict):
+    task_id = base.get_task_id(request)
+    try:
+        from scripts.scene_reference_handoff import resolve_previous
+        result = resolve_previous(
+            str(body.get("project_id") or ""), body.get("slot"),
+            str(body.get("prompt") or ""), float(body.get("duration") or 5),
+        )
+    except (ValueError, TypeError, OSError, KeyError) as exc:
+        raise HttpException(task_id=task_id, status_code=422, message=str(exc)) from exc
+    return utils.get_response(200, result)
+
+
+@router.post(
+    "/internal/type-beat/scene-reference/register",
+    summary="Extract real motion final-frame, upload to Adobe, and atomically lock its reference",
+)
+def register_scene_reference_internal(request: Request, body: dict):
+    task_id = base.get_task_id(request)
+    try:
+        from scripts.scene_reference_handoff import register_scene
+        result = register_scene(
+            str(body.get("project_id") or ""), body.get("scene_result") or {},
+        )
+    except (ValueError, TypeError, OSError, KeyError) as exc:
+        raise HttpException(task_id=task_id, status_code=422, message=str(exc)) from exc
+    except subprocess.SubprocessError as exc:
+        raise HttpException(task_id=task_id, status_code=503,
+                            message="Firefly frame extraction unavailable") from exc
+    return utils.get_response(200, result)
+
+
+@router.post(
     "/internal/type-beat/modal-wav/preflight",
     summary="Verify exact Modal Suno WAV exists before generating paid motion clips",
 )
