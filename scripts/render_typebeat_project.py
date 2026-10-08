@@ -242,7 +242,7 @@ def load_project(project_id: str) -> dict:
             "asset_role": asset_role,
         })
 
-    return _build_project(
+    compiled = _build_project(
         project_id=project_id,
         source_clip_id=source_clip_id,
         title=title,
@@ -250,6 +250,10 @@ def load_project(project_id: str) -> dict:
         source_kind=source_kind,
         scenes=scenes,
     )
+    # All-video mode is recognized only with explicit verified DB project metadata.
+    mode_row = psql_rows(f"select metadata->>'every_scene_video' from media_video_projects where project_id='{pid}' limit 1;")
+    compiled["all_motion_firefly"] = bool(mode_row and mode_row[0] and mode_row[0][0] == 'true')
+    return compiled
 
 
 def load_manifest(path: str) -> dict:
@@ -334,7 +338,8 @@ def _render_image_motion(
 
 
 def _normalize_video_scene(
-    video_path: str, output: Path, duration: float, *, threads: int = 4
+    video_path: str, output: Path, duration: float, *, threads: int = 4,
+    title: str | None = None,
 ) -> str:
     width, height = VideoAspect.landscape.to_resolution()
     fps = 30
@@ -343,6 +348,25 @@ def _normalize_video_scene(
         f"crop={width}:{height},fps={fps},format=yuv420p,setpts=PTS-STARTPTS"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
+    if title is not None:
+        # Textfiles eliminate text escaping and make titles reproducible in FFmpeg.
+        safe_title = " ".join(str(title).split())[:100]
+        title_file = output.parent / "animated-track-title.txt"
+        brand_file = output.parent / "animated-producer-brand.txt"
+        title_file.write_text(safe_title, encoding="utf-8")
+        brand_file.write_text("STRICTLYBEATS  •  BC PRODUCED", encoding="utf-8")
+        font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        # Moving title enters from below; alpha ramps up and out over the shot.
+        fade_end = min(3.4, max(1.5, duration - 0.18))
+        fade = f"min(1,t*3)*max(0,min(1,({fade_end:.2f}-t)*2))"
+        vf += (
+            f",drawtext=fontfile={font}:textfile={brand_file}:"
+            "fontcolor=0xD7AD62:fontsize=34:x=(w-text_w)/2:"
+            f"y=h*0.29+26*exp(-3*t):alpha='{fade}'"
+            f",drawtext=fontfile={font}:textfile={title_file}:"
+            "fontcolor=white:fontsize=70:borderw=2:bordercolor=0x11131A:"
+            f"x=(w-text_w)/2:y=h*0.40+42*exp(-3*t):alpha='{fade}'"
+        )
     subprocess.run(
         [
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
@@ -372,7 +396,8 @@ def materialize_scene_sources(
                 continue
             output = work_dir / f"scene-{scene['ordinal']:03d}-video-motion.mp4"
             sources.append(
-                _normalize_video_scene(asset_path, output, duration, threads=threads)
+                _normalize_video_scene(asset_path, output, duration, threads=threads,
+                                       title=project["title"] if scene["ordinal"] == 1 and project.get("all_motion_firefly") else None)
             )
             continue
         output = work_dir / f"scene-{scene['ordinal']:03d}-image-motion.mp4"
@@ -443,6 +468,8 @@ def validate_production_shape(project: dict) -> None:
             f"production type-beat requires {TYPEBEAT_MIN_SCENES}-{TYPEBEAT_MAX_SCENES} scenes, "
             f"got {scene_count}"
         )
+    if project.get("all_motion_firefly") and motion_count == scene_count:
+        return
     if motion_count != TYPEBEAT_REQUIRED_MOTION_SCENES:
         raise SystemExit(
             f"production type-beat requires exactly {TYPEBEAT_REQUIRED_MOTION_SCENES} motion scenes, "
