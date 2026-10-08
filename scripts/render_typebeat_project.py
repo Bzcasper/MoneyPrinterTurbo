@@ -54,14 +54,30 @@ def _remote_cache_root() -> Path:
 
 def psql_rows(sql: str) -> list[list[str]]:
     cmd = [
-        "docker", "exec", DB_CONTAINER, "psql", "-U", DB_USER, "-d", DB_NAME,
-        "-At", "-F", "|", "-c", sql,
+        "docker",
+        "exec",
+        DB_CONTAINER,
+        "psql",
+        "-U",
+        DB_USER,
+        "-d",
+        DB_NAME,
+        "-At",
+        "-F",
+        "|",
+        "-c",
+        sql,
     ]
     remote_host = _remote_db_host()
     if remote_host:
         cmd = [
-            "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
-            remote_host, shlex.join(cmd),
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=10",
+            remote_host,
+            shlex.join(cmd),
         ]
     raw = subprocess.check_output(cmd, text=True, timeout=60)
     return [line.split("|") for line in raw.splitlines() if line.strip()]
@@ -92,8 +108,14 @@ def _materialize_remote_path(source: str, project_id: str, label: str) -> str:
     try:
         subprocess.run(
             [
-                "scp", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
-                f"{remote_host}:{source}", str(tmp),
+                "scp",
+                "-q",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=10",
+                f"{remote_host}:{source}",
+                str(tmp),
             ],
             check=True,
             timeout=900,
@@ -116,7 +138,9 @@ def _asset_type(asset_type: str, path: str) -> str:
         return "image"
     if suffix in _VIDEO_EXTENSIONS:
         return "video"
-    raise SystemExit(f"unsupported scene asset type: {asset_type or suffix or 'unknown'} ({path})")
+    raise SystemExit(
+        f"unsupported scene asset type: {asset_type or suffix or 'unknown'} ({path})"
+    )
 
 
 def _validate_scenes(scenes: list[dict]) -> list[dict]:
@@ -133,10 +157,14 @@ def _validate_scenes(scenes: list[dict]) -> list[dict]:
         start = float(scene["start_seconds"])
         end = float(scene["end_seconds"])
         if not all(math.isfinite(value) for value in (start, end)) or end <= start:
-            raise SystemExit(f"invalid scene timing at ordinal {ordinal}: {start}..{end}")
+            raise SystemExit(
+                f"invalid scene timing at ordinal {ordinal}: {start}..{end}"
+            )
         if previous_end is None:
             if abs(start) > 0.05:
-                raise SystemExit(f"canonical scene timeline must start at zero, got {start}")
+                raise SystemExit(
+                    f"canonical scene timeline must start at zero, got {start}"
+                )
         elif abs(start - previous_end) > 0.05:
             raise SystemExit(
                 f"canonical scene timeline is not contiguous at ordinal {ordinal}: "
@@ -144,8 +172,12 @@ def _validate_scenes(scenes: list[dict]) -> list[dict]:
             )
         asset_path = str(scene.get("asset_path") or "").strip()
         if not asset_path or not Path(asset_path).is_file():
-            raise SystemExit(f"scene asset is missing at ordinal {ordinal}: {asset_path or '<empty>'}")
-        scene["asset_type"] = _asset_type(str(scene.get("asset_type") or ""), asset_path)
+            raise SystemExit(
+                f"scene asset is missing at ordinal {ordinal}: {asset_path or '<empty>'}"
+            )
+        scene["asset_type"] = _asset_type(
+            str(scene.get("asset_type") or ""), asset_path
+        )
         scene["asset_path"] = asset_path
         scene["ordinal"] = ordinal
         scene["start_seconds"] = start
@@ -155,8 +187,13 @@ def _validate_scenes(scenes: list[dict]) -> list[dict]:
 
 
 def _build_project(
-    *, project_id: str, source_clip_id: str, title: str, audio_path: str,
-    source_kind: str, scenes: list[dict],
+    *,
+    project_id: str,
+    source_clip_id: str,
+    title: str,
+    audio_path: str,
+    source_kind: str,
+    scenes: list[dict],
 ) -> dict:
     scenes = _validate_scenes(scenes)
     if not Path(audio_path).is_file():
@@ -189,7 +226,9 @@ def load_project(project_id: str) -> dict:
     try:
         audio_path = _materialize_remote_path(audio_path, project_id, "source-audio")
     except (OSError, subprocess.SubprocessError) as exc:
-        raise SystemExit(f"failed to materialize source audio for {project_id}: {exc}") from exc
+        raise SystemExit(
+            f"failed to materialize source audio for {project_id}: {exc}"
+        ) from exc
 
     rows = psql_rows(
         f"select s.ordinal,s.start_seconds,s.end_seconds,"
@@ -233,14 +272,16 @@ def load_project(project_id: str) -> dict:
                 f"no local canonical asset found for project {project_id} scene {ordinal}{detail}"
             )
         asset_type, asset_path, asset_role = selected
-        scenes.append({
-            "ordinal": int(ordinal),
-            "start_seconds": float(start),
-            "end_seconds": float(end),
-            "asset_type": asset_type,
-            "asset_path": asset_path,
-            "asset_role": asset_role,
-        })
+        scenes.append(
+            {
+                "ordinal": int(ordinal),
+                "start_seconds": float(start),
+                "end_seconds": float(end),
+                "asset_type": asset_type,
+                "asset_path": asset_path,
+                "asset_role": asset_role,
+            }
+        )
 
     compiled = _build_project(
         project_id=project_id,
@@ -251,8 +292,12 @@ def load_project(project_id: str) -> dict:
         scenes=scenes,
     )
     # All-video mode is recognized only with explicit verified DB project metadata.
-    mode_row = psql_rows(f"select metadata->>'every_scene_video' from media_video_projects where project_id='{pid}' limit 1;")
-    compiled["all_motion_firefly"] = bool(mode_row and mode_row[0] and mode_row[0][0] == 'true')
+    mode_row = psql_rows(
+        f"select metadata->>'every_scene_video' from media_video_projects where project_id='{pid}' limit 1;"
+    )
+    compiled["all_motion_firefly"] = bool(
+        mode_row and mode_row[0] and mode_row[0][0] == "true"
+    )
     return compiled
 
 
@@ -288,8 +333,21 @@ def normalize_audio(source: str, work_dir: Path) -> str:
     output = work_dir / "source-audio.wav"
     subprocess.run(
         [
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(source_path),
-            "-vn", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", str(output),
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(source_path),
+            "-vn",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-c:a",
+            "pcm_s16le",
+            str(output),
         ],
         check=True,
         timeout=900,
@@ -308,10 +366,8 @@ def _render_image_motion(
     frames = max(1, round(duration * fps))
     zoom_step = 0.00115 if ordinal % 2 else 0.00130
     progress = f"min(on/{frames},1)"
-    x_fraction = (f"0.12+0.76*{progress}" if ordinal % 2
-                  else f"0.88-0.76*{progress}")
-    y_fraction = (f"0.25+0.50*{progress}" if ordinal % 3
-                  else f"0.75-0.50*{progress}")
+    x_fraction = f"0.12+0.76*{progress}" if ordinal % 2 else f"0.88-0.76*{progress}"
+    y_fraction = f"0.25+0.50*{progress}" if ordinal % 3 else f"0.75-0.50*{progress}"
     x_expr = f"(iw-iw/zoom)*({x_fraction})"
     y_expr = f"(ih-ih/zoom)*({y_fraction})"
     vf = (
@@ -323,13 +379,49 @@ def _render_image_motion(
     output.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-            "-loop", "1", "-framerate", str(fps), "-i", image_path,
-            "-vf", vf, "-t", f"{duration:.3f}", "-an", "-c:v", "libx264",
-            "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
-            "-r", str(fps), "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
-            "-profile:v", "high", "-level:v", "4.2", "-video_track_timescale", "90000",
-            "-threads", str(max(1, threads)), "-movflags", "+faststart", str(output),
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-loop",
+            "1",
+            "-framerate",
+            str(fps),
+            "-i",
+            image_path,
+            "-vf",
+            vf,
+            "-t",
+            f"{duration:.3f}",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-r",
+            str(fps),
+            "-g",
+            "60",
+            "-keyint_min",
+            "60",
+            "-sc_threshold",
+            "0",
+            "-profile:v",
+            "high",
+            "-level:v",
+            "4.2",
+            "-video_track_timescale",
+            "90000",
+            "-threads",
+            str(max(1, threads)),
+            "-movflags",
+            "+faststart",
+            str(output),
         ],
         check=True,
         timeout=max(120, int(duration * 12)),
@@ -338,7 +430,11 @@ def _render_image_motion(
 
 
 def _normalize_video_scene(
-    video_path: str, output: Path, duration: float, *, threads: int = 4,
+    video_path: str,
+    output: Path,
+    duration: float,
+    *,
+    threads: int = 4,
     title: str | None = None,
     cinematic_grade: bool = False,
 ) -> str:
@@ -353,35 +449,105 @@ def _normalize_video_scene(
         # Slightly richer spectral highlights without destroying shadow detail.
         vf += ",eq=contrast=1.07:saturation=1.23:gamma=1.02"
     if title is not None:
-        # Textfiles eliminate text escaping and make titles reproducible in FFmpeg.
+        # Each beat gets a reproducible art-directed title opener using moving
+        # video as its background. No static title-card or WebGL loop is inserted.
         safe_title = " ".join(str(title).split())[:100]
-        # Internal Suno generation-variant IDs are provenance, not viewer-facing typography.
-        safe_title = re.sub(r"-VAR-\d+-R\d+-\d+$", "", safe_title, flags=re.IGNORECASE)
-        title_file = output.parent / "animated-track-title.txt"
-        brand_file = output.parent / "animated-producer-brand.txt"
-        title_file.write_text(safe_title, encoding="utf-8")
-        brand_file.write_text("STRICTLYBEATS  •  BC PRODUCED", encoding="utf-8")
+        safe_title = re.sub(
+            r"-VAR-\d+-R\d+-\d+$", "", safe_title, flags=re.IGNORECASE
+        ).strip()
+        words = safe_title.upper().split()
+        split = max(1, (len(words) + 1) // 2)
+        first = " ".join(words[:split])
+        second = " ".join(words[split:]) or "ORIGINAL INSTRUMENTAL"
+        styles = [
+            (
+                "velocity",
+                "0xFFB454",
+                "if(lt(t,0.8),-450*(1-t/0.8),0)",
+                "if(lt(t,1),500*(1-t),0)",
+            ),
+            (
+                "signal",
+                "0x7DEAFF",
+                "if(lt(t,0.8),450*(1-t/0.8),0)",
+                "if(lt(t,1),-500*(1-t),0)",
+            ),
+            ("noir", "0xE6D8BA", "0", "0"),
+            (
+                "prism",
+                "0xFFCC73",
+                "if(lt(t,0.9),280*(1-t/0.9),0)",
+                "if(lt(t,1),-280*(1-t),0)",
+            ),
+        ]
+        index = int(hashlib.sha256(safe_title.encode()).hexdigest()[:8], 16) % len(
+            styles
+        )
+        title_style, accent, enter_first, enter_second = styles[index]
+        brand_file = output.parent / "brand-line.txt"
+        main_file = output.parent / "main-title.txt"
+        second_file = output.parent / "second-title.txt"
+        foot_file = output.parent / "episode-style.txt"
+        brand_file.write_text("STRICTLY BEATS   /   BC PRODUCED", encoding="utf-8")
+        main_file.write_text(first, encoding="utf-8")
+        second_file.write_text(second, encoding="utf-8")
+        foot_file.write_text(
+            title_style.upper() + "  /  ORIGINAL TYPE BEAT", encoding="utf-8"
+        )
         font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        # Moving title enters from below; alpha ramps up and out over the shot.
-        fade_end = min(3.4, max(1.5, duration - 0.18))
-        fade = f"min(1,t*3)*max(0,min(1,({fade_end:.2f}-t)*2))"
+        reg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        fade_end = min(3.8, max(1.8, duration - 0.12))
+        fade = f"min(1,t*4)*max(0,min(1,({fade_end:.2f}-t)*1.55))"
         vf += (
-            f",drawtext=fontfile={font}:textfile={brand_file}:"
-            "fontcolor=0xD7AD62:fontsize=34:x=(w-text_w)/2:"
-            f"y=h*0.29+26*exp(-3*t):alpha='{fade}'"
-            f",drawtext=fontfile={font}:textfile={title_file}:"
-            "fontcolor=white:fontsize=70:borderw=2:bordercolor=0x11131A:"
-            f"x=(w-text_w)/2:y=h*0.40+42*exp(-3*t):alpha='{fade}'"
+            f",drawbox=x=236:y=335:w=9:h=356:color={accent}@0.96:t=fill:enable='between(t,0.2,{fade_end:.2f})'"
+            f",drawtext=fontfile={reg}:textfile={brand_file}:fontcolor={accent}:fontsize=27:x=w*0.16:y=h*0.28:alpha='{fade}'"
+            f",drawtext=fontfile={font}:textfile={main_file}:fontcolor=white:fontsize=105:x='w*0.16+{enter_first}':y=h*0.365:alpha='{fade}'"
+            f",drawtext=fontfile={font}:textfile={second_file}:fontcolor={accent}:fontsize=99:x='w*0.16+{enter_second}':y=h*0.48:alpha='{fade}'"
+            f",drawtext=fontfile={reg}:textfile={foot_file}:fontcolor=white:fontsize=29:x=w*0.16:y=h*0.65:alpha='{fade}'"
         )
     subprocess.run(
         [
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-            "-stream_loop", "-1", "-i", video_path, "-an", "-vf", vf,
-            "-t", f"{duration:.3f}", "-c:v", "libx264", "-preset", "veryfast",
-            "-crf", "18", "-pix_fmt", "yuv420p", "-r", str(fps),
-            "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
-            "-profile:v", "high", "-level:v", "4.2", "-video_track_timescale", "90000",
-            "-threads", str(max(1, threads)), "-movflags", "+faststart", str(output),
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-stream_loop",
+            "-1",
+            "-i",
+            video_path,
+            "-an",
+            "-vf",
+            vf,
+            "-t",
+            f"{duration:.3f}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-r",
+            str(fps),
+            "-g",
+            "60",
+            "-keyint_min",
+            "60",
+            "-sc_threshold",
+            "0",
+            "-profile:v",
+            "high",
+            "-level:v",
+            "4.2",
+            "-video_track_timescale",
+            "90000",
+            "-threads",
+            str(max(1, threads)),
+            "-movflags",
+            "+faststart",
+            str(output),
         ],
         check=True,
         timeout=max(120, int(duration * 12)),
@@ -402,9 +568,16 @@ def materialize_scene_sources(
                 continue
             output = work_dir / f"scene-{scene['ordinal']:03d}-video-motion.mp4"
             sources.append(
-                _normalize_video_scene(asset_path, output, duration, threads=threads,
-                                       title=project["title"] if scene["ordinal"] == 1 and project.get("all_motion_firefly") else None,
-                                       cinematic_grade=bool(project.get("all_motion_firefly")))
+                _normalize_video_scene(
+                    asset_path,
+                    output,
+                    duration,
+                    threads=threads,
+                    title=project["title"]
+                    if scene["ordinal"] == 1 and project.get("all_motion_firefly")
+                    else None,
+                    cinematic_grade=bool(project.get("all_motion_firefly")),
+                )
             )
             continue
         output = work_dir / f"scene-{scene['ordinal']:03d}-image-motion.mp4"
@@ -416,7 +589,9 @@ def materialize_scene_sources(
     return sources
 
 
-def _concat_normalized_scenes(scene_sources: list[str], output: Path, duration: float) -> None:
+def _concat_normalized_scenes(
+    scene_sources: list[str], output: Path, duration: float
+) -> None:
     concat_file = output.with_suffix(".concat.txt")
     lines = []
     for source in scene_sources:
@@ -429,10 +604,26 @@ def _concat_normalized_scenes(scene_sources: list[str], output: Path, duration: 
     try:
         subprocess.run(
             [
-                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                "-f", "concat", "-safe", "0", "-i", str(concat_file),
-                "-c", "copy", "-fflags", "+genpts", "-t", f"{duration:.3f}",
-                "-movflags", "+faststart", str(staged),
+                "ffmpeg",
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_file),
+                "-c",
+                "copy",
+                "-fflags",
+                "+genpts",
+                "-t",
+                f"{duration:.3f}",
+                "-movflags",
+                "+faststart",
+                str(staged),
             ],
             check=True,
             timeout=max(300, int(duration * 4)),
@@ -445,16 +636,41 @@ def _concat_normalized_scenes(scene_sources: list[str], output: Path, duration: 
         staged.unlink(missing_ok=True)
 
 
-def _mux_master_audio(combined: Path, audio: str, output: Path, duration: float) -> None:
+def _mux_master_audio(
+    combined: Path, audio: str, output: Path, duration: float
+) -> None:
     staged = output.with_name(f".{output.name}.staged.mp4")
     try:
         subprocess.run(
             [
-                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                "-i", str(combined), "-i", audio,
-                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
-                "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
-                "-t", f"{duration:.3f}", "-shortest", "-movflags", "+faststart",
+                "ffmpeg",
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                str(combined),
+                "-i",
+                audio,
+                "-map",
+                "0:v:0",
+                "-map",
+                "1:a:0",
+                "-c:v",
+                "copy",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-ar",
+                "44100",
+                "-ac",
+                "2",
+                "-t",
+                f"{duration:.3f}",
+                "-shortest",
+                "-movflags",
+                "+faststart",
                 str(staged),
             ],
             check=True,
@@ -485,11 +701,20 @@ def validate_production_shape(project: dict) -> None:
 
 
 def _render_result(
-    project: dict, output: Path, audio: str, duration: float, cuts: list[float],
-    scene_sources: list[str], *, render_mode: str, bgm_ok: bool = True,
+    project: dict,
+    output: Path,
+    audio: str,
+    duration: float,
+    cuts: list[float],
+    scene_sources: list[str],
+    *,
+    render_mode: str,
+    bgm_ok: bool = True,
 ) -> dict:
     if not bgm_ok or not output.is_file() or output.stat().st_size <= 0:
-        raise SystemExit("MoneyPrinterTurbo final render did not produce a usable output")
+        raise SystemExit(
+            "MoneyPrinterTurbo final render did not produce a usable output"
+        )
     image_count = sum(scene["asset_type"] == "image" for scene in project["scenes"])
     video_count = sum(scene["asset_type"] == "video" for scene in project["scenes"])
     result = {
@@ -510,8 +735,14 @@ def _render_result(
 
 
 def _render_project_legacy(
-    project: dict, output: Path, work_dir: Path, audio: str, duration: float,
-    cuts: list[float], *, threads: int,
+    project: dict,
+    output: Path,
+    work_dir: Path,
+    audio: str,
+    duration: float,
+    cuts: list[float],
+    *,
+    threads: int,
 ) -> dict:
     scene_sources = materialize_scene_sources(project, work_dir, threads=threads)
     if len(scene_sources) != len(cuts) - 1:
@@ -553,14 +784,26 @@ def _render_project_legacy(
         combined, audio, "", str(output), params, bgm_file_override=""
     )
     return _render_result(
-        project, output, audio, duration, cuts, scene_sources,
-        render_mode="legacy", bgm_ok=bool(bgm_ok),
+        project,
+        output,
+        audio,
+        duration,
+        cuts,
+        scene_sources,
+        render_mode="legacy",
+        bgm_ok=bool(bgm_ok),
     )
 
 
 def _render_project_fast(
-    project: dict, output: Path, work_dir: Path, audio: str, duration: float,
-    cuts: list[float], *, threads: int,
+    project: dict,
+    output: Path,
+    work_dir: Path,
+    audio: str,
+    duration: float,
+    cuts: list[float],
+    *,
+    threads: int,
 ) -> dict:
     scene_sources = materialize_scene_sources(
         project, work_dir, threads=threads, normalize_video=True
@@ -578,23 +821,99 @@ def _render_project_fast(
 
 
 OFFICIAL_PRODUCER_TAG_REMOTE = "/mnt/NUC_BACKUP/content-creation/producer-tags/bc-you-nasty-official-v1/BC-you-nasty-OFFICIAL.wav"
-OFFICIAL_PRODUCER_TAG_SHA256 = "05818907ec2d762343819960101785022367e13172b1aa1b29653450b20d6b5b"
+OFFICIAL_PRODUCER_TAG_SHA256 = (
+    "05818907ec2d762343819960101785022367e13172b1aa1b29653450b20d6b5b"
+)
 
 
-def tag_preview_audio(audio: str, project_id: str, work_dir: Path) -> str:
-    """Mix verified producer ID once at t=0, preserving the clean library master."""
-    tag = _materialize_remote_path(OFFICIAL_PRODUCER_TAG_REMOTE, project_id, "official-bc-producer-tag")
+def official_tag_drop_positions(
+    duration_seconds: float, *, kind: str = "beat"
+) -> list[float]:
+    """Beat videos use the approved repeated preview tag; vocal songs intro-only."""
+    if duration_seconds <= 0:
+        raise ValueError("source audio duration must be positive")
+    if kind not in {"beat", "song"}:
+        raise ValueError("Invalid producer-tag media kind")
+    drops = [0.8]
+    if kind == "beat":
+        mark = 30.0
+        while mark < duration_seconds - 8.0:
+            drops.append(mark)
+            mark += 30.0
+    return drops
+
+
+def tag_preview_audio(
+    audio: str, project_id: str, work_dir: Path, *, kind: str = "beat"
+) -> str:
+    """Tag the listening preview, never modify source or buyer/licensed masters."""
+    tag = _materialize_remote_path(
+        OFFICIAL_PRODUCER_TAG_REMOTE, project_id, "official-bc-producer-tag"
+    )
     if not Path(tag).is_file():
         raise RuntimeError("official producer tag WAV is unavailable")
     digest = hashlib.sha256(Path(tag).read_bytes()).hexdigest()
     if digest != OFFICIAL_PRODUCER_TAG_SHA256:
         raise RuntimeError("official producer tag integrity mismatch")
+    source_length = float(
+        subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=nw=1:nk=1",
+                str(audio),
+            ],
+            text=True,
+            check=True,
+            capture_output=True,
+            timeout=15,
+        ).stdout.strip()
+    )
+    positions = official_tag_drop_positions(source_length, kind=kind)
+    tag_labels = [f"bc-tag-{index}" for index in range(len(positions))]
+    filters = ["[0:a]volume=0.94[clean-beat]"]
+    if len(tag_labels) == 1:
+        filters.append("[1:a]volume=0.55[bc-tag-0]")
+    else:
+        filters.append(
+            "[1:a]volume=0.55,asplit="
+            + str(len(tag_labels))
+            + "".join(f"[{label}]" for label in tag_labels)
+        )
+    for index, t in enumerate(positions):
+        delay = round(t * 1000)
+        filters.append(f"[bc-tag-{index}]adelay={delay}|{delay}[bc-drop-{index}]")
+    filters.append(
+        "[clean-beat]"
+        + "".join(f"[bc-drop-{i}]" for i in range(len(positions)))
+        + f"amix=inputs={len(positions) + 1}:duration=first:normalize=0:dropout_transition=0,alimiter=limit=0.95[out]"
+    )
     output = work_dir / "tagged-preview.wav"
-    subprocess.run([
-        "ffmpeg", "-y", "-v", "error", "-i", str(audio), "-i", str(tag),
-        "-filter_complex", "[1:a]volume=0.55[tag];[0:a][tag]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[out]",
-        "-map", "[out]", "-c:a", "pcm_s24le", str(output),
-    ], check=True, timeout=180)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-i",
+            str(audio),
+            "-i",
+            str(tag),
+            "-filter_complex",
+            ";".join(filters),
+            "-map",
+            "[out]",
+            "-c:a",
+            "pcm_s24le",
+            str(output),
+        ],
+        check=True,
+        timeout=180,
+    )
     if not output.is_file() or output.stat().st_size < 100000:
         raise RuntimeError("tagged audio was not created")
     return str(output)
@@ -613,7 +932,9 @@ def render_project(
         audio = tag_preview_audio(audio, project["project_id"], work_dir)
     duration = float(project["cuts"][-1])
     cuts = video.validate_beat_cut_times(project["cuts"], duration)
-    mode = (render_mode or os.environ.get("TYPEBEAT_RENDER_MODE", "fast")).strip().lower()
+    mode = (
+        (render_mode or os.environ.get("TYPEBEAT_RENDER_MODE", "fast")).strip().lower()
+    )
     if mode == "legacy":
         return _render_project_legacy(
             project, output, work_dir, audio, duration, cuts, threads=threads
@@ -634,12 +955,18 @@ def main() -> None:
         description="Render a canonical StrictlyBeats type-beat project"
     )
     parser.add_argument("project_id", nargs="?")
-    parser.add_argument("--manifest", help="Render from a local canonical manifest instead of PostgreSQL")
-    parser.add_argument("--audio", help="Override the canonical/manifest source audio path")
+    parser.add_argument(
+        "--manifest",
+        help="Render from a local canonical manifest instead of PostgreSQL",
+    )
+    parser.add_argument(
+        "--audio", help="Override the canonical/manifest source audio path"
+    )
     parser.add_argument("--output")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument(
-        "--render-mode", choices=("fast", "legacy"),
+        "--render-mode",
+        choices=("fast", "legacy"),
         default=os.environ.get("TYPEBEAT_RENDER_MODE", "fast"),
     )
     parser.add_argument("--plan-only", action="store_true")
@@ -647,7 +974,9 @@ def main() -> None:
 
     if bool(args.project_id) == bool(args.manifest):
         raise SystemExit("provide exactly one of project_id or --manifest")
-    project = load_manifest(args.manifest) if args.manifest else load_project(args.project_id)
+    project = (
+        load_manifest(args.manifest) if args.manifest else load_project(args.project_id)
+    )
     if not args.manifest:
         validate_production_shape(project)
     if args.audio:
@@ -655,7 +984,9 @@ def main() -> None:
             raise SystemExit(f"source audio is missing: {args.audio}")
         project["audio_path"] = args.audio
         project["source_kind"] = "audio_override"
-    output = Path(args.output) if args.output else _default_output(project["project_id"])
+    output = (
+        Path(args.output) if args.output else _default_output(project["project_id"])
+    )
 
     plan = {
         **project,
@@ -663,8 +994,12 @@ def main() -> None:
         "duration_seconds": project["cuts"][-1],
         "scene_count": len(project["cuts"]) - 1,
         "asset_count": len(project["assets"]),
-        "image_scene_count": sum(scene["asset_type"] == "image" for scene in project["scenes"]),
-        "video_scene_count": sum(scene["asset_type"] == "video" for scene in project["scenes"]),
+        "image_scene_count": sum(
+            scene["asset_type"] == "image" for scene in project["scenes"]
+        ),
+        "video_scene_count": sum(
+            scene["asset_type"] == "video" for scene in project["scenes"]
+        ),
     }
     if args.plan_only:
         print(json.dumps(plan, indent=2))
@@ -676,7 +1011,9 @@ def main() -> None:
         try:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
-            raise SystemExit(f"render already in progress: {project['project_id']}") from exc
+            raise SystemExit(
+                f"render already in progress: {project['project_id']}"
+            ) from exc
         result = render_project(
             project, output, threads=max(1, args.threads), render_mode=args.render_mode
         )
