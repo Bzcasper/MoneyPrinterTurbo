@@ -351,6 +351,8 @@ def _normalize_video_scene(
     if title is not None:
         # Textfiles eliminate text escaping and make titles reproducible in FFmpeg.
         safe_title = " ".join(str(title).split())[:100]
+        # Internal Suno generation-variant IDs are provenance, not viewer-facing typography.
+        safe_title = re.sub(r"-VAR-\d+-R\d+-\d+$", "", safe_title, flags=re.IGNORECASE)
         title_file = output.parent / "animated-track-title.txt"
         brand_file = output.parent / "animated-producer-brand.txt"
         title_file.write_text(safe_title, encoding="utf-8")
