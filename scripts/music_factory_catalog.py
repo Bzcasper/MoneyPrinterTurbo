@@ -21,6 +21,20 @@ MODAL = Path("/home/bobby/projects/suno-typebeat-foundation/.venv/bin/modal")
 CATALOG = Path("/home/bobby/.cache/scene-continuity/modal-factory-catalog.json")
 UUID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
 SHA = re.compile(r"^[a-f0-9]{64}$")
+INSTRUMENTAL_LYRICS = re.compile(r"^(?:\[\s*instrumental\s*\]\s*)+$", re.I)
+
+
+def _lyrics_compatible_with_instrumental(item: dict) -> bool:
+    """Reject explicitly vocal lyrics even if database instrumental flag is set.
+
+    Style tags such as 'male vocals' describe the requested genre and are not
+    evidence that the produced audio contains vocals. Empty or [Instrumental]
+    lyrics are compatible with the authoritative instrumental flag.
+    """
+    lyrics = str(item.get("lyrics") or "").strip()
+    return not lyrics or lyrics.casefold() == "instrumental" or bool(
+        INSTRUMENTAL_LYRICS.fullmatch(lyrics)
+    )
 
 SQL_SELECT = """
 SELECT row_to_json(t)::text FROM (
@@ -186,6 +200,8 @@ def _classify(row: dict, item: dict) -> dict | None:
     if row.get("project_type") != ("type_beat" if kind == "beat" else "song"):
         return None
     if bool(row.get("make_instrumental")) is not (kind == "beat"):
+        return None
+    if kind == "beat" and not _lyrics_compatible_with_instrumental(item):
         return None
     if (
         str(item.get("title") or "").strip().casefold()

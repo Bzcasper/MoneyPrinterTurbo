@@ -99,6 +99,12 @@ def test_catalog_beat_identity_is_not_inferred_from_a_vocal():
     assert expected["media_kind"] == "beat"
     assert expected["apply_producer_tag"] is True
     assert expected["source_rights_verified"] is False
+    item["lyrics"] = "[Instrumental]"
+    assert _classify(row, item)["media_kind"] == "beat"
+    item["lyrics"] = "[Verse 1] Words are performed"
+    assert _classify(row, item) is None
+    item["lyrics"] = "[Instrumental]\n[Chorus] Words are performed"
+    assert _classify(row, item) is None
 
 
 def test_mp3_song_selector_checks_expected_modal_identity():
