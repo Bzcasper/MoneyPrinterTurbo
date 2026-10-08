@@ -57,14 +57,20 @@ def test_distinct_lane_storyboard_has_real_30_shot_handoffs(kind):
     # Every shot uses a deliberate camera position; rhythm cues escalate per act.
     assert len({s["camera"] for s in story["scenes"]}) == 30
     assert len({s["music_reaction"] for s in story["scenes"]}) == 10
-    assert all(
-        len(generated_prompt(scene, story, n, kind)) <= 1485
-        for n, scene in enumerate(story["scenes"], 1)
-    )
-    assert all(
-        "Negative constraints: no face drift" in generated_prompt(scene, story, n, kind)
-        for n, scene in enumerate(story["scenes"], 1)
-    )
+    if kind == "beat":
+        assert all(
+            len(generated_prompt(scene, story, n, kind)) <= 1485
+            for n, scene in enumerate(story["scenes"], 1)
+        )
+        assert all(
+            "Negative constraints: no face drift" in generated_prompt(scene, story, n, kind)
+            for n, scene in enumerate(story["scenes"], 1)
+        )
+    else:
+        # The old mood fallback is kept for compatibility but cannot run
+        # as a vocal-song prompt without actual verified lyric evidence.
+        with pytest.raises(ValueError, match="lyric-based"):
+            generated_prompt(story["scenes"][0], story, 1, kind)
     assert story == build_story(source)
     if kind == "song":
         assert "STRICTLY BEATS" not in json.dumps(story).upper()
@@ -128,15 +134,23 @@ def test_mp3_song_selector_checks_expected_modal_identity():
         permitted_download=False,
         rights_status="",
     )
+    canonical_lyrics = "\n".join(
+        ["The streetlights fall across the road where I wait for you"]
+        * 12
+    )
+    catalog = {CLIP: {"title": row["title"], "lyrics": canonical_lyrics}}
     with patch("scripts.music_factory_catalog.psql", return_value=[json.dumps(row)]):
-        result = _mp3_song_candidate()
+        result = _mp3_song_candidate(catalog=catalog)
     assert result["apply_producer_tag"] is False
     assert result["source_format"] == "mp3"
     assert result["source_volume"] == "suno-songs-v2"
     assert result["publishing_approved"] is False
     row["source_modal_path"] = "evil/relative.mp3"
     with patch("scripts.music_factory_catalog.psql", return_value=[json.dumps(row)]):
-        assert _mp3_song_candidate() is None
+        assert _mp3_song_candidate(catalog=catalog) is None
+    row["source_modal_path"] = f"{CLIP}/{CLIP}.mp3"
+    with patch("scripts.music_factory_catalog.psql", return_value=[json.dumps(row)]):
+        assert _mp3_song_candidate(catalog={}) is None
 
 
 def test_atomic_retry_claim_does_not_duplicate_other_source():

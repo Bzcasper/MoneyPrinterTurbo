@@ -131,6 +131,30 @@ def moving(path: Path) -> bool:
 
 
 def generated_prompt(scene: dict, treatment: dict, slot: int, kind: str) -> str:
+    if kind == "song":
+        from scripts.music_factory_lyrics_story import NEGATIVES
+
+        if treatment.get("planning_source") != "canonical_suno_lyrics_grounded_v1":
+            raise ValueError("Vocal music videos require verified lyric-based planning")
+        source_line = str(scene.get("lyric_excerpt") or "").strip()
+        if not source_line:
+            raise ValueError("Song shot lacks the exact canonical lyric it depicts")
+        fragments = [
+            f"SHOT {slot:02d}/30; LYRIC BEAT {scene['master_beat']}/10.",
+            str(treatment["character_bible"]),
+            f"SUNG LYRIC (evidence, do not show text): '{source_line[:170]}'.",
+            "ACTION: enact the sung lyric as a concrete on-camera event or grounded metaphor, with the exact subject, action and object it names.",
+            f"LOCATION FROM LYRICS: {str(scene['location'])[:118]}.",
+            f"CAMERA: {str(scene['camera'])[:95]}.",
+            f"BEGINS: {str(scene['opening_state'])[:100]}.",
+            f"ENDS: {str(scene['end_state'])[:100]}.",
+            "The song's words drive every action. Same protagonist and objects, actual moving film shot, no subtitles, no abstract visualizer, no unrelated scene.",
+            NEGATIVES,
+        ]
+        result = " ".join(fragments)
+        if len(result) > 1485:
+            raise ValueError(f"Lyric shot {slot} exceeds provider limit ({len(result)})")
+        return result
     fragments = [
         f"SCENE {slot:02d}/30; ACT {scene['master_beat']}/10.",
         f"EPISODE STORY: {str(treatment['thesis'])[:103]}.",
@@ -160,7 +184,10 @@ def generated_prompt(scene: dict, treatment: dict, slot: int, kind: str) -> str:
 def story(clip: dict, folder: Path) -> dict:
     output = folder / "story.json"
     if output.is_file():
-        return json.loads(output.read_text())
+        existing = json.loads(output.read_text())
+        if clip["media_kind"] == "song" and existing.get("planning_source") != "canonical_suno_lyrics_grounded_v1":
+            raise ValueError("Legacy mood-only song storyboard cannot be resumed as lyric-grounded")
+        return existing
     bpm = float(clip.get("bpm") or 120)
     title = clip["title"]
     payload = {
@@ -192,7 +219,15 @@ def story(clip: dict, folder: Path) -> dict:
                 treatment = result.get("director_treatment")
         except (OSError, TimeoutError, ValueError) as exc:
             print("DIRECTOR_FALLBACK", type(exc).__name__, flush=True)
-    if not isinstance(treatment, dict):
+    if clip["media_kind"] == "song":
+        from scripts.music_factory_catalog import _catalog
+        from scripts.music_factory_lyrics_story import qualified_catalog_lyrics, build_lyric_story
+
+        lyrics = qualified_catalog_lyrics(_catalog(), clip["clip_id"], title)
+        if not lyrics:
+            raise ValueError("Canonical source lyrics missing; do not invent song scenes")
+        treatment = build_lyric_story(clip, lyrics)
+    elif not isinstance(treatment, dict):
         treatment = build_story(clip)
 
     scenes = treatment.get("scenes") or []
@@ -484,7 +519,26 @@ def main(request_file: Path) -> None:
                 print(
                     "MOTION_SCENE_VERIFIED", v["slot"], len(results), "/30", flush=True
                 )
+        from scripts.music_factory_visual_qa import save_review
+        edges = save_review(
+            [folder / "scenes" / f"scene-{i:03d}.mp4" for i in range(1, 31)],
+            folder / "visual-continuity-review.json",
+        )
+        print(
+            "SCENE_BOUNDARY_QA", edges["audited_transitions"],
+            "high_discontinuity", edges["high_discontinuity_count"],
+            flush=True,
+        )
         report = render(clip, treatment, folder)
+        report["scene_boundary_qa"] = {
+            "audited_transitions": edges["audited_transitions"],
+            "high_discontinuity_count": edges["high_discontinuity_count"],
+            "high_discontinuity_pairs": edges["high_discontinuity_pairs"],
+            "weak_structure_count": edges["weak_structure_count"],
+            "conditioning_verified": False,
+            "visual_qa_approved": False,
+            "review_path": str(folder / "visual-continuity-review.json"),
+        }
         report = upload_to_r2(clip, report)
         (folder / "final" / "AUTOMATED_TECHNICAL_QA.json").write_text(
             json.dumps(report, indent=2) + "\n"
