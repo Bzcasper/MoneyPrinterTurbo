@@ -97,7 +97,10 @@ SELECT row_to_json(t)::text FROM (
 """
 
 
-def _mp3_song_candidate() -> dict | None:
+def _mp3_song_candidate(*, catalog: dict | None = None) -> dict | None:
+    from scripts.music_factory_lyrics_story import qualified_catalog_lyrics
+
+    catalog = _catalog() if catalog is None else catalog
     for line in psql(SQL_MP3_SONGS):
         row = json.loads(line)
         ident = str(row.get("clip_id") or "")
@@ -116,6 +119,11 @@ def _mp3_song_candidate() -> dict | None:
             row.get("project_type") != "song"
             or row.get("make_instrumental") is not False
         ):
+            continue
+        # Never spend 30 clips on a song without real source lyrics.
+        # Style tags or the title must not be substituted for the narrative.
+        lyrics = qualified_catalog_lyrics(catalog, ident, str(row.get("title") or ""))
+        if not lyrics:
             continue
         return {
             "has_work": True,
@@ -254,7 +262,7 @@ def next_candidate() -> dict:
         result = _classify(row, item)
         if result:
             playable.append(result)
-    mp3_song = _mp3_song_candidate()
+    mp3_song = _mp3_song_candidate(catalog=catalog)
     if mp3_song:
         playable.append(mp3_song)
     # Deterministically alternate beat/song preference hourly so either lane
