@@ -544,6 +544,25 @@ def assemble_type_beat_project_internal(request: Request, body: dict):
 
 
 @router.post(
+    "/internal/type-beat/modal-wav/preflight",
+    summary="Verify exact Modal Suno WAV exists before generating paid motion clips",
+)
+def preflight_modal_wav_internal(request: Request, body: dict):
+    task_id = base.get_task_id(request)
+    clip_id = str(body.get("clip_id") or "").strip() if isinstance(body, dict) else ""
+    title = str(body.get("title") or "").strip() if isinstance(body, dict) else ""
+    try:
+        from scripts.modal_wav_preflight import verify_song
+        result = verify_song(clip_id, title)
+    except ValueError as exc:
+        raise HttpException(task_id=task_id,status_code=422,message=str(exc)) from exc
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        raise HttpException(task_id=task_id,status_code=503,
+                            message="Modal WAV catalog preflight failed; media generation held") from exc
+    return utils.get_response(200,result)
+
+
+@router.post(
     "/internal/type-beat/projects/{project_id}/render-modal-sync",
     summary="Render 30–50 real motion scenes with the exact Modal library WAV",
 )
