@@ -17,6 +17,23 @@ def sample(n=30):
              'provider':'firefly','model':'firefly-video','firefly_fair_use':True,
              'prompt':f'Scene {i}: physically continuous cinematic motion'}
             for i in range(1,n+1)],
+        'director_treatment':{
+            'thesis':'A suspended sun pulse crosses an abandoned orbital city',
+            'motif':'golden rotating signal',
+            'display_title':'Solar Current',
+            'title_motion':'swoop',
+            'scenes':[
+                {'master_beat':min(10,(i-1)*10//n+1),
+                 'act':'MOVEMENT',
+                 'location':f'Glass station {i}',
+                 'camera':'35mm advancing tracking',
+                 'action':f'Gold signal advances through station {i}',
+                 'opening_state':'Light arrives' if i==1 else f'Signal exits station {i-1}',
+                 'end_state':f'Signal exits station {i}',
+                 'transition':'Follow the gold signal'}
+                for i in range(1,n+1)
+            ]
+        },
     }
 
 
@@ -70,3 +87,31 @@ def test_accepts_valid_generated_video_probe():
             'format':{'duration':'5.041667'}}
     with patch('scripts.assemble_full_motion_project.subprocess.run',return_value=subprocess.CompletedProcess([],0,json.dumps(sample),'')):
         assert probe_generated_motion('/srv/data/n8n-media/store/firefly/videos/good.mp4')['codec']=='h264'
+
+
+def test_custom_story_missing_or_broken_handoff_rejected():
+    invalid=sample()
+    invalid.pop('director_treatment')
+    with pytest.raises(ValueError,match='unique director_treatment'):
+        validate_payload(invalid)
+    invalid=sample()
+    invalid['director_treatment']['scenes'][1]['opening_state']='Reset to unrelated place'
+    with pytest.raises(ValueError,match='handoff mismatch'):
+        validate_payload(invalid)
+
+
+def test_assembled_sql_preserves_ten_master_beat_references():
+    from unittest.mock import patch
+    data=sample(30)
+    library=[[TITLE,'t','91.8935','/media/songs/source.wav','wav_only']]
+    with patch('scripts.assemble_full_motion_project.psql_rows',side_effect=[[],library]),\
+        patch('scripts.assemble_full_motion_project.remote_file_exists',return_value=True),\
+        patch('scripts.assemble_full_motion_project.probe_generated_motion',return_value={'duration':5.0}),\
+        patch('scripts.assemble_full_motion_project.psql_exec') as save:
+        outcome=assemble(data)
+    written=save.call_args.args[0]
+    assert outcome['video_scene_count']==30
+    assert 'handoff_from,handoff_to,continuity_state' in written
+    assert 'story_contract_version' in written
+    assert 'hero_handoff' in written
+    assert 'Solar Current' in written

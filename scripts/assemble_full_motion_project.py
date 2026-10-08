@@ -58,6 +58,37 @@ def validate_payload(payload: dict) -> tuple[str, str, int, float, list[dict]]:
         normalized.append({'ordinal': ordinal, 'path': path, 'prompt': prompt})
     if seen != set(range(1, count + 1)):
         raise ValueError('scene ordinals are incomplete')
+    narrative = payload.get('director_treatment')
+    if not isinstance(narrative, dict):
+        raise ValueError('unique director_treatment required for every production video')
+    beats = narrative.get('scenes')
+    if not isinstance(beats, list) or len(beats) != count:
+        raise ValueError('director_treatment must cover every video scene')
+    if not str(narrative.get('thesis') or '').strip() or not str(narrative.get('motif') or '').strip():
+        raise ValueError('narrative needs a unique thesis and recurring motif')
+    beat_order = []
+    locations = set()
+    for i, frame in enumerate(beats):
+        if not isinstance(frame, dict):
+            raise ValueError('narrative scene is not an object')
+        beat = frame.get('master_beat')
+        if isinstance(beat, bool) or not isinstance(beat, int) or not 1 <= beat <= 10:
+            raise ValueError('each narrative scene needs an integer master_beat 1–10')
+        beat_order.append(beat)
+        for key in ('location','camera','action','opening_state','end_state'):
+            if not str(frame.get(key) or '').strip():
+                raise ValueError('narrative scene missing ' + key)
+        if i and frame['opening_state'].strip() != beats[i-1]['end_state'].strip():
+            raise ValueError('narrative scene handoff mismatch')
+        locations.add((frame['location'].strip().casefold(), frame['action'].strip().casefold()))
+    if set(beat_order) != set(range(1,11)) or beat_order != sorted(beat_order):
+        raise ValueError('exactly 10 master beats must appear in narrative order')
+    if len(locations) < math.ceil(count * .8):
+        raise ValueError('repeated locations/actions fail unique storyboard requirement')
+    display_title = str(narrative.get('display_title') or '').strip()
+    if not 1 <= len(display_title.split()) <= 2:
+        raise ValueError('animated video title must be one or two words')
+
     return project_id, clip_id, count, bpm, sorted(normalized, key=lambda a:a['ordinal'])
 
 
@@ -100,7 +131,16 @@ def assemble(payload: dict) -> dict:
         probe_generated_motion(item['path'])
     cuts = beat_aligned_boundaries(duration,bpm,count)
     style = str(payload.get('visual_style') or 'one coherent cinematic four-act story, no people')[:1300]
-    projmeta = {'source_kind':provenance,'every_scene_video':True,'provider':'firefly-video','strict_unlimited':True,
+    treatment=payload['director_treatment']
+    preset=treatment.get('effects') if isinstance(treatment.get('effects'),dict) else {}
+    visual_fx={'webglMode': preset.get('webglMode','off'), 'showEqualizer':False}
+    if visual_fx['webglMode'] not in ('off','accent','full'):
+        raise ValueError('invalid optional WebGL preset')
+    projmeta = {'director_treatment':{**treatment,'story_contract_version':2},
+                'visual_effects': visual_fx,
+                'story_contract_version':2,
+                'source_clip_id':clip,
+                'source_kind':provenance,'every_scene_video':True,'provider':'firefly-video','strict_unlimited':True,
                 'credit_spending_allowed':False,'title_card':'animated_over_scene_1','bpm':bpm,'scene_count':count,
                 'motion_scene_count':count,'publishing_approved':False}
     sql = ['BEGIN;','INSERT INTO media_video_projects (project_id,project_type,source_clip_id,title,status,commercial_gate_required,continuity_pack,visual_direction,metadata) VALUES '
@@ -109,8 +149,18 @@ def assemble(payload: dict) -> dict:
         ordinal=item['ordinal']; sid=f'{pid}-scene-{ordinal:03d}'; aid=f'{pid}-video-{ordinal:03d}'
         start,end=cuts[ordinal-1:ordinal+1]
         prompt=item['prompt']
-        scene='INSERT INTO media_video_scenes (scene_id,project_id,ordinal,section_name,source_text,start_seconds,end_seconds,timeline_mode,location_key,asset_preference,visual_prompt,motion_prompt,continuity_refs,qa_requirements,status,director_brief,prompt_optimized,prompt_engine,scene_type,provider_strategy,continuity_priority,motion_priority,visual_priority,needs_anchor,scene_state,max_candidates,negative_constraints) VALUES '
-        scene+=f'({_q(sid)},{_q(pid)},{ordinal},\'type-beat\',{_q("actual Adobe-generated motion")},{start:.6f},{end:.6f},\'present\',\'cinematic-four-act\',\'video\',{_q(prompt)},{_q(prompt)},\'[]\'::jsonb,\'{{}}\'::jsonb,\'PLANNED\',\'original continuous motion\',\'{{}}\'::jsonb,\'{{}}\'::jsonb,\'motion\',\'firefly-unlimited-video\',\'high\',\'high\',\'high\',true,\'READY\',1,\'no people or random text\');'
+        authored=treatment['scenes'][ordinal-1]
+        beat=int(authored['master_beat'])
+        is_hero=ordinal==1 or beat!=int(treatment['scenes'][ordinal-2]['master_beat'])
+        role='hero_handoff' if is_hero else 'develop'
+        state={'opening_state':authored['opening_state'].strip(),
+               'end_state':authored['end_state'].strip(),
+               'master_beat':beat,'master_scene_id':f'beat:{beat:02d}',
+               'shot_role':role,'camera':authored['camera'],
+               'effects':{'webgl': authored.get('effects',{}).get('webgl') is True
+                          if isinstance(authored.get('effects'),dict) else False}}
+        scene='INSERT INTO media_video_scenes (scene_id,project_id,ordinal,section_name,source_text,start_seconds,end_seconds,timeline_mode,location_key,asset_preference,visual_prompt,motion_prompt,continuity_refs,qa_requirements,status,director_brief,prompt_optimized,prompt_engine,scene_type,provider_strategy,continuity_priority,motion_priority,visual_priority,needs_anchor,scene_state,max_candidates,negative_constraints,master_scene_id,master_scene_ordinal,shot_role,handoff_from,handoff_to,continuity_state) VALUES '
+        scene+=f'({_q(sid)},{_q(pid)},{ordinal},{_q(str(authored.get("act") or "type-beat"))},{_q(authored["action"])},{start:.6f},{end:.6f},\'present\',{_q(authored["location"])},\'video\',{_q(prompt)},{_q(prompt)},{_q(json.dumps([treatment["motif"]]))}::jsonb,\'{{}}\'::jsonb,\'PLANNED\',{_q(treatment["thesis"])},\'{{}}\'::jsonb,\'{{}}\'::jsonb,\'motion\',\'firefly-unlimited-video\',\'high\',\'high\',\'high\',true,\'READY\',1,\'no people or random text\',{_q(state["master_scene_id"])},{beat},{_q(role)},{_q(state["opening_state"])},{_q(state["end_state"])},{_q(json.dumps(state))}::jsonb);'
         meta={'billing_mode':'firefly_fair_use','reference':'generated_video','image_motion':False,'scene_ordinal':ordinal}
         asset='INSERT INTO media_video_assets (asset_id,project_id,scene_id,asset_type,provider,model,uri,local_path,prompt,metadata,status,asset_role,qa_status,lock_status) VALUES '
         asset+=f'({_q(aid)},{_q(pid)},{_q(sid)},\'video\',\'firefly\',\'firefly-video\',{_q(item["path"])},{_q(item["path"])},{_q(prompt)},{_q(json.dumps(meta))}::jsonb,\'APPROVED\',\'locked_video\',\'APPROVED\',\'LOCKED\');'

@@ -544,6 +544,52 @@ def assemble_type_beat_project_internal(request: Request, body: dict):
 
 
 @router.post(
+    "/internal/type-beat/projects/{project_id}/render-modal-sync",
+    summary="Render 30–50 real motion scenes with the exact Modal library WAV",
+)
+def render_modal_motion_internal(
+    request: Request,
+    project_id: str = Path(..., description="Canonical music video project ID"),
+    body: dict | None = None,
+):
+    task_id = base.get_task_id(request)
+    if body is None or body.get("modal_render") is not True or body.get("publishing_approved") is True:
+        raise HttpException(task_id=task_id, status_code=400, message="explicit Modal render request required")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id):
+        raise HttpException(task_id=task_id, status_code=400, message="invalid project ID")
+    try:
+        from scripts.modal_motion_gateway import render_modal
+        result = render_modal(project_id, width=int(body.get("width",1920)),
+                              height=int(body.get("height",1080)))
+    except (ValueError, TypeError) as exc:
+        raise HttpException(task_id=task_id, status_code=422, message=str(exc)) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HttpException(task_id=task_id, status_code=504,
+                            message="Modal render exceeded worker timeout; check ROG job state") from exc
+    except RuntimeError as exc:
+        raise HttpException(task_id=task_id, status_code=503, message=str(exc)) from exc
+    return utils.get_response(200, result)
+
+
+@router.post(
+    "/internal/type-beat/full-motion/verify-modal",
+    summary="Independently QA Modal WAV full-motion master and keep publication held",
+)
+def verify_modal_motion_internal(request: Request, body: dict):
+    task_id = base.get_task_id(request)
+    project_id = str(body.get("project_id") or "") if isinstance(body,dict) else ""
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id):
+        raise HttpException(task_id=task_id,status_code=400,message="invalid project ID")
+    try:
+        from scripts.qa_modal_motion_project import verify
+        result = verify(project_id)
+    except (ValueError, OSError, KeyError, subprocess.SubprocessError) as exc:
+        raise HttpException(task_id=task_id, status_code=422,
+                            message="Modal motion QA failed: " + str(exc)[-500:]) from exc
+    return utils.get_response(200,result)
+
+
+@router.post(
     "/internal/type-beat/projects/{project_id}/render-sync",
     summary="Trusted-LAN synchronous type-beat render",
 )
