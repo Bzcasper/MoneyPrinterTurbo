@@ -298,15 +298,22 @@ def _render_image_motion(
 ) -> str:
     width, height = VideoAspect.landscape.to_resolution()
     fps = 30
-    # Deterministic, subtle Ken Burns movement. Direction alternates by scene so
-    # still-image sections do not read as frozen slides while remaining stable.
-    zoom_step = 0.00045 if ordinal % 2 else 0.00035
-    x_expr = "iw/2-(iw/zoom/2)" if ordinal % 3 else "iw/2-(iw/zoom/2)+8*sin(on/45)"
-    y_expr = "ih/2-(ih/zoom/2)" if ordinal % 4 else "ih/2-(ih/zoom/2)+6*cos(on/50)"
+    # Stronger shot-specific dolly/pan coverage. Unlike independent AI generations,
+    # this uses only the approved canonical pixels but gives every beat-cut an
+    # obvious camera direction rather than repeating near-frozen stills.
+    frames = max(1, round(duration * fps))
+    zoom_step = 0.00115 if ordinal % 2 else 0.00130
+    progress = f"min(on/{frames},1)"
+    x_fraction = (f"0.12+0.76*{progress}" if ordinal % 2
+                  else f"0.88-0.76*{progress}")
+    y_fraction = (f"0.25+0.50*{progress}" if ordinal % 3
+                  else f"0.75-0.50*{progress}")
+    x_expr = f"(iw-iw/zoom)*({x_fraction})"
+    y_expr = f"(ih-ih/zoom)*({y_fraction})"
     vf = (
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},"
-        f"zoompan=z='min(zoom+{zoom_step:.5f},1.08)':x='{x_expr}':y='{y_expr}':"
+        f"zoompan=z='min(zoom+{zoom_step:.5f},1.16)':x='{x_expr}':y='{y_expr}':"
         f"d=1:s={width}x{height}:fps={fps},format=yuv420p"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
