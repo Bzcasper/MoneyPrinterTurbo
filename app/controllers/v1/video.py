@@ -443,6 +443,40 @@ def render_canonical_still_motion_internal(request: Request, body: dict):
 
 
 @router.post(
+    "/internal/type-beat/canonical-still-coverage",
+    summary="Trusted-LAN still coverage from an existing canonical image",
+)
+def render_canonical_still_coverage_internal(request: Request, body: dict):
+    request_id = base.get_task_id(request)
+    if not isinstance(body, dict):
+        raise HttpException(task_id=request_id, status_code=400, message="object required")
+    project_id = str(body.get("project_id") or "")
+    host_path = str(body.get("host_path") or "")
+    try:
+        ordinal = int(body.get("ordinal"))
+        variant = int(body.get("variant", 0))
+    except (TypeError, ValueError) as exc:
+        raise HttpException(task_id=request_id, status_code=400, message="invalid ordinal/variant") from exc
+    if (not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", project_id)
+            or not host_path.startswith("/srv/data/n8n-media/store/")
+            or ".." in pathlib.Path(host_path).parts
+            or pathlib.Path(host_path).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}
+            or not 1 <= ordinal <= 50 or not 0 <= variant <= 9):
+        raise HttpException(task_id=request_id, status_code=400, message="untrusted canonical coverage input")
+    root = pathlib.Path(config.root_dir)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root)
+    result = subprocess.run(
+        [sys.executable, "-c", "import json,sys; from scripts.canonical_still_motion_bridge import derive_scene_still; print(json.dumps(derive_scene_still(sys.argv[1],sys.argv[2],int(sys.argv[3]),int(sys.argv[4]))))",
+         host_path, project_id, str(ordinal), str(variant)],
+        cwd=str(root), env=env, text=True, capture_output=True, timeout=240, check=False,
+    )
+    if result.returncode != 0:
+        raise HttpException(task_id=request_id, status_code=422, message="canonical scene coverage failed; inspect source and scene state")
+    return utils.get_response(200, json.loads(result.stdout))
+
+
+@router.post(
     "/internal/type-beat/projects/assemble",
     summary="Trusted-LAN type-beat project assembly",
 )

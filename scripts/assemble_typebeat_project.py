@@ -151,12 +151,12 @@ def supplied_image_assets(raw: object, scene_count: int, motion_ordinals: list[i
             raise SystemExit(f"still {ordinal} is missing or outside approved media store")
         provider = str(item.get("provider") or "").strip()
         model = str(item.get("model") or "").strip()
-        if provider not in {"firefly", "grok2api"} or not model:
+        if provider not in {"firefly", "grok2api", "moneyprinter-image-motion"} or not model:
             raise SystemExit(f"still {ordinal} has unsupported or missing provider provenance")
         by_ordinal[ordinal] = {
             "path": path, "provider": provider, "model": model[:120],
             "prompt": str(item.get("prompt") or "")[:6000],
-            "billing_mode": "firefly_fair_use" if provider == "firefly" else "grok2api",
+            "billing_mode": "firefly_fair_use" if provider == "firefly" else "canonical_local_transform" if provider == "moneyprinter-image-motion" else "grok2api",
         }
     return by_ordinal
 
@@ -323,6 +323,7 @@ def main() -> None:
         item = motion_by_ordinal[ordinal]
         billing = ("firefly_fair_use" if item["provider"] == "firefly"
                    else "grok2api" if item["provider"] == "grok2api"
+                   else "canonical_local_transform" if item["provider"] == "moneyprinter-image-motion"
                    else "unverified_free_provider")
         metadata = json.dumps({"billing_mode": billing, "source": "n8n-media-provider-router"})
         asset_rows.append(
