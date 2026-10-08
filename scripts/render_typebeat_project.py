@@ -536,6 +536,29 @@ def _render_project_fast(
     )
 
 
+OFFICIAL_PRODUCER_TAG_REMOTE = "/mnt/NUC_BACKUP/content-creation/producer-tags/bc-you-nasty-official-v1/BC-you-nasty-OFFICIAL.wav"
+OFFICIAL_PRODUCER_TAG_SHA256 = "05818907ec2d762343819960101785022367e13172b1aa1b29653450b20d6b5b"
+
+
+def tag_preview_audio(audio: str, project_id: str, work_dir: Path) -> str:
+    """Mix verified producer ID once at t=0, preserving the clean library master."""
+    tag = _materialize_remote_path(OFFICIAL_PRODUCER_TAG_REMOTE, project_id, "official-bc-producer-tag")
+    if not Path(tag).is_file():
+        raise RuntimeError("official producer tag WAV is unavailable")
+    digest = hashlib.sha256(Path(tag).read_bytes()).hexdigest()
+    if digest != OFFICIAL_PRODUCER_TAG_SHA256:
+        raise RuntimeError("official producer tag integrity mismatch")
+    output = work_dir / "tagged-preview.wav"
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error", "-i", str(audio), "-i", str(tag),
+        "-filter_complex", "[1:a]volume=0.55[tag];[0:a][tag]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[out]",
+        "-map", "[out]", "-c:a", "pcm_s24le", str(output),
+    ], check=True, timeout=180)
+    if not output.is_file() or output.stat().st_size < 100000:
+        raise RuntimeError("tagged audio was not created")
+    return str(output)
+
+
 def render_project(
     project: dict, output: Path, *, threads: int = 4, render_mode: str | None = None
 ) -> dict:
@@ -544,6 +567,9 @@ def render_project(
     work_dir.mkdir(parents=True, exist_ok=True)
 
     audio = normalize_audio(project["audio_path"], work_dir)
+    # Type-beat public previews require the verified BC intro tag; source masters remain untouched.
+    if project.get("source_clip_id") and project.get("project_id"):
+        audio = tag_preview_audio(audio, project["project_id"], work_dir)
     duration = float(project["cuts"][-1])
     cuts = video.validate_beat_cut_times(project["cuts"], duration)
     mode = (render_mode or os.environ.get("TYPEBEAT_RENDER_MODE", "fast")).strip().lower()
