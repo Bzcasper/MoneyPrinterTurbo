@@ -313,7 +313,7 @@ def _render_image_motion(
     vf = (
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},"
-        f"zoompan=z='min(zoom+{zoom_step:.5f},1.16)':x='{x_expr}':y='{y_expr}':"
+        f"zoompan=z='min(1+{zoom_step:.5f}*on,1.16)':x='{x_expr}':y='{y_expr}':"
         f"d=1:s={width}x{height}:fps={fps},format=yuv420p"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
