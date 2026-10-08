@@ -829,17 +829,14 @@ OFFICIAL_PRODUCER_TAG_SHA256 = (
 def official_tag_drop_positions(
     duration_seconds: float, *, kind: str = "beat"
 ) -> list[float]:
-    """Beat videos use the approved repeated preview tag; vocal songs intro-only."""
+    """One opening tag and one low-volume outro on beats; vocal songs untagged."""
     if duration_seconds <= 0:
         raise ValueError("source audio duration must be positive")
     if kind not in {"beat", "song"}:
         raise ValueError("Invalid producer-tag media kind")
     drops = [0.8] if kind == "beat" else []
-    if kind == "beat":
-        mark = 30.0
-        while mark < duration_seconds - 8.0:
-            drops.append(mark)
-            mark += 30.0
+    if kind == "beat" and duration_seconds >= 30.0:
+        drops.append(round(duration_seconds - 14.0, 3))
     return drops
 
 
@@ -881,11 +878,9 @@ def tag_preview_audio(
     if len(tag_labels) == 1:
         filters.append("[1:a]volume=0.55[bc-tag-0]")
     else:
-        filters.append(
-            "[1:a]volume=0.55,asplit="
-            + str(len(tag_labels))
-            + "".join(f"[{label}]" for label in tag_labels)
-        )
+        filters.append("[1:a]asplit=2[bc-rawtag0][bc-rawtag1]")
+        filters.append("[bc-rawtag0]volume=0.55[bc-tag-0]")
+        filters.append("[bc-rawtag1]volume=0.055[bc-tag-1]")
     for index, t in enumerate(positions):
         delay = round(t * 1000)
         filters.append(f"[bc-tag-{index}]adelay={delay}|{delay}[bc-drop-{index}]")
