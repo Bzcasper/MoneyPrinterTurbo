@@ -38,7 +38,9 @@ def lyrics():
 def test_exactly_thirty_lyric_grounded_shots_and_handoffs():
     raw = lyrics()
     s = build_lyric_story(source(), raw)
-    assert s["planning_source"] == "canonical_suno_lyrics_grounded_v1"
+    assert s["planning_source"] == "canonical_suno_lyrics_grounded_v2"
+    assert len({scene["location"] for scene in s["scenes"]}) == 1
+    assert all("ONE plain-hooded protagonist" in scene["action"] for scene in s["scenes"])
     assert s["media_kind"] == "song"
     assert len(s["scenes"]) == 30
     assert {scene["master_beat"] for scene in s["scenes"]} == set(range(1, 11))
@@ -48,7 +50,9 @@ def test_exactly_thirty_lyric_grounded_shots_and_handoffs():
     for i, scene in enumerate(s["scenes"], 1):
         prompt = generated_prompt(scene, s, i, "song")
         assert BIBLE in prompt
-        assert scene["lyric_excerpt"][:140] in prompt
+        assert scene["lyric_excerpt"][:80] in prompt
+        assert "no duplicates" in prompt
+        assert "NO lettering" in prompt
         assert len(prompt) <= 1485
         assert "no face drift" in prompt
         assert "STRICTLY BEATS" not in prompt

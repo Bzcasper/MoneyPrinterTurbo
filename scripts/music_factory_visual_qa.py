@@ -69,6 +69,10 @@ def audit_scenes(sources: list[Path]) -> dict:
         "conditioning_verified": False,
         "visual_qa_approved": False,
         "screening_status": "REVIEW_REQUIRED" if severe else "REVIEW_REQUIRED_UNCONDITIONED",
+        "review_priority": "CRITICAL" if len(severe) >= 10 else (
+            "HIGH" if len(severe) >= 4 else "STANDARD"
+        ),
+        "visual_content_review_required": True,
         "audited_transitions": len(rows),
         "high_discontinuity_count": len(severe),
         "weak_structure_count": len(weak),
@@ -91,3 +95,32 @@ def save_review(sources: list[Path], destination: Path) -> dict:
     stage.write_text(json.dumps(report, indent=2) + "\n")
     stage.replace(destination)
     return report
+
+
+def build_contact_sheet(sources: list[Path], output: Path) -> Path:
+    """Thirty frame audit grid. Never a substitute for watching the full video."""
+    from io import BytesIO
+    from PIL import Image, ImageDraw
+
+    if len(sources) != 30 or not all(p.is_file() for p in sources):
+        raise ValueError("Thirty actual moving scene sources are required")
+    width, height = 260, 166
+    sheet = Image.new("RGB", (5 * width, 6 * height), (14, 17, 23))
+    painter = ImageDraw.Draw(sheet)
+    for slot, video in enumerate(sources, 1):
+        capture = subprocess.run(
+            ["ffmpeg", "-nostdin", "-v", "error", "-ss", "2.4",
+             "-i", str(video), "-frames:v", "1", "-vf",
+             "scale=256:144", "-f", "image2pipe", "-vcodec", "mjpeg",
+             "pipe:1"],
+            capture_output=True, check=True, timeout=22,
+        ).stdout
+        frame = Image.open(BytesIO(capture)).convert("RGB")
+        x, y = ((slot - 1) % 5) * width, ((slot - 1) // 5) * height
+        sheet.paste(frame, (x + 2, y + 2))
+        painter.text((x + 7, y + 148), f"SHOT {slot:02d}", fill=(236, 241, 246))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staged = output.with_suffix(".tmp.jpg")
+    sheet.save(staged, format="JPEG", quality=81, optimize=True)
+    staged.replace(output)
+    return output

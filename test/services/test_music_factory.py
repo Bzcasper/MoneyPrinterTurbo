@@ -135,7 +135,7 @@ def test_mp3_song_selector_checks_expected_modal_identity():
         rights_status="",
     )
     canonical_lyrics = "\n".join(
-        ["The streetlights fall across the road where I wait for you"]
+        ["I walk the street and cross the corner toward the road"]
         * 12
     )
     catalog = {CLIP: {"title": row["title"], "lyrics": canonical_lyrics}}
@@ -216,3 +216,48 @@ def test_beat_prompts_never_slice_environment_words_midtoken():
         assert "night sky portal" in prompt
         assert "nig." not in prompt
         assert "same one molten gold glass sphere" in prompt
+
+
+def test_song_selection_skips_generic_lyric_plans_without_claiming_queue():
+    generic = "\n".join(["I have so many thoughts inside my head today"] * 15)
+    row = dict(
+        clip_id=CLIP, queue_id=40, project_type="song",
+        channel="BC TRAP GOD", make_instrumental=False,
+        title="Plain Words", duration_seconds=155,
+        source_modal_path=f"{CLIP}/{CLIP}.mp3",
+        source_format="mp3", source_volume="suno-songs-v2",
+        source_sha256="b" * 64, source_bytes=4000000,
+        style_tags="trap", permitted_download=False, rights_status="",
+    )
+    catalog = {CLIP: {"title": "Plain Words", "lyrics": generic}}
+    with patch("scripts.music_factory_catalog.psql", return_value=[json.dumps(row)]):
+        assert _mp3_song_candidate(catalog=catalog) is None
+
+
+def test_song_selector_selects_best_grounded_story_not_first_generic():
+    first = CLIP
+    second = "9d2956ac-1fb4-48ac-8cab-03b4965e5ffa"
+    def mk(clip_id, title):
+        return dict(
+            clip_id=clip_id, queue_id=41 if clip_id == first else 42,
+            project_type="song", channel="BC TRAP GOD",
+            make_instrumental=False, title=title, duration_seconds=155,
+            source_modal_path=f"{clip_id}/{clip_id}.mp3",
+            source_format="mp3", source_volume="suno-songs-v2",
+            source_sha256="b" * 64, source_bytes=4000000,
+            style_tags="trap", permitted_download=False, rights_status="",
+        )
+    poor = "\n".join(["The complicated feeling is difficult to explain"] * 14)
+    direct = "\n".join(["I walk by the water and step over a wave"] * 14)
+    catalog = {
+        first: {"title": "Vague", "lyrics": poor},
+        second: {"title": "Literal", "lyrics": direct},
+    }
+    with patch("scripts.music_factory_catalog.psql", return_value=[
+        json.dumps(mk(first, "Vague")),
+        json.dumps(mk(second, "Literal")),
+    ]):
+        result = _mp3_song_candidate(catalog=catalog)
+    assert result["clip_id"] == second
+    assert result["lyric_grounded_shots"] == 30
+    assert result["publishing_approved"] is False
