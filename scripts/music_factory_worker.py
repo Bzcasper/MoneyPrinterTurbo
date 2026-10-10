@@ -145,23 +145,43 @@ def generated_prompt(scene: dict, treatment: dict, slot: int, kind: str) -> str:
     if kind == "song":
         from scripts.music_factory_lyrics_story import NEGATIVES
 
-        if treatment.get("planning_source") != "canonical_suno_lyrics_grounded_v1":
+        version = str(treatment.get("planning_source") or "")
+        if version not in {
+            "canonical_suno_lyrics_grounded_v1",
+            "canonical_suno_lyrics_grounded_v2",
+        }:
             raise ValueError("Vocal music videos require verified lyric-based planning")
         source_line = str(scene.get("lyric_excerpt") or "").strip()
         if not source_line:
             raise ValueError("Song shot lacks the exact canonical lyric it depicts")
-        fragments = [
-            f"SHOT {slot:02d}/30; LYRIC BEAT {scene['master_beat']}/10.",
-            str(treatment["character_bible"]),
-            f"SUNG LYRIC (evidence, do not show text): '{_prompt_words(source_line, 170)}'.",
-            "ACTION: enact the sung lyric as a concrete on-camera event or grounded metaphor, with the exact subject, action and object it names.",
-            f"LOCATION FROM LYRICS: {_prompt_words(scene['location'], 118)}.",
-            f"CAMERA: {_prompt_words(scene['camera'], 95)}.",
-            f"BEGINS: {_prompt_words(scene['opening_state'], 100)}.",
-            f"ENDS: {_prompt_words(scene['end_state'], 100)}.",
-            "The song's words drive every action. Same protagonist and objects, actual moving film shot, no subtitles, no abstract visualizer, no unrelated scene.",
-            NEGATIVES,
-        ]
+        if version == "canonical_suno_lyrics_grounded_v2":
+            fragments = [
+                f"SHOT {slot:02d}/30; LYRIC BEAT {scene['master_beat']}/10.",
+                str(treatment["character_bible"]),
+                f"FILM ACTION: {_prompt_words(scene['action'], 146)}.",
+                f"ONE LOCATION: {_prompt_words(scene['location'], 78)}.",
+                f"LIGHT: {_prompt_words(treatment['lighting'], 56)}.",
+                f"CAMERA: {_prompt_words(scene['camera'], 67)}.",
+                f"PREVIOUS: {_prompt_words(scene['opening_state'], 68)}.",
+                f"HANDOFF: {_prompt_words(scene['end_state'], 68)}.",
+                f"LYRIC EVIDENCE, NEVER DISPLAY TEXT: '{_prompt_words(source_line, 100)}'.",
+                "Real moving film. ONE person only, no duplicates. No signs, writing, subtitles, or logos.",
+                NEGATIVES,
+            ]
+        else:
+            # Legacy in-flight projects retain their original shot contract.
+            fragments = [
+                f"SHOT {slot:02d}/30; LYRIC BEAT {scene['master_beat']}/10.",
+                str(treatment["character_bible"]),
+                f"SUNG LYRIC (evidence, do not show text): '{_prompt_words(source_line, 170)}'.",
+                "ACTION: enact the sung lyric as a concrete on-camera event or grounded metaphor, with the exact subject, action and object it names.",
+                f"LOCATION FROM LYRICS: {_prompt_words(scene['location'], 118)}.",
+                f"CAMERA: {_prompt_words(scene['camera'], 95)}.",
+                f"BEGINS: {_prompt_words(scene['opening_state'], 100)}.",
+                f"ENDS: {_prompt_words(scene['end_state'], 100)}.",
+                "The song's words drive every action. Same protagonist and objects, actual moving film shot, no subtitles, no abstract visualizer, no unrelated scene.",
+                NEGATIVES,
+            ]
         result = " ".join(fragments)
         if len(result) > 1485:
             raise ValueError(f"Lyric shot {slot} exceeds provider limit ({len(result)})")
@@ -192,7 +212,10 @@ def story(clip: dict, folder: Path) -> dict:
     if output.is_file():
         existing = json.loads(output.read_text())
         if clip["media_kind"] == "song":
-            if existing.get("planning_source") != "canonical_suno_lyrics_grounded_v1":
+            if existing.get("planning_source") not in {
+                "canonical_suno_lyrics_grounded_v1",
+                "canonical_suno_lyrics_grounded_v2",
+            }:
                 raise ValueError("Legacy mood-only song storyboard cannot be resumed as lyric-grounded")
             if not (existing.get("lyric_timing") or {}).get("scene_boundaries_seconds"):
                 from scripts.music_factory_catalog import _catalog
@@ -563,10 +586,15 @@ def main(request_file: Path) -> None:
                 print(
                     "MOTION_SCENE_VERIFIED", v["slot"], len(results), "/30", flush=True
                 )
-        from scripts.music_factory_visual_qa import save_review
+        from scripts.music_factory_visual_qa import save_review, build_contact_sheet
+        sources = [folder / "scenes" / f"scene-{i:03d}.mp4" for i in range(1, 31)]
         edges = save_review(
-            [folder / "scenes" / f"scene-{i:03d}.mp4" for i in range(1, 31)],
+            sources,
             folder / "visual-continuity-review.json",
+        )
+        contact_sheet = build_contact_sheet(
+            sources,
+            folder / "visual-contact-sheet.jpg",
         )
         print(
             "SCENE_BOUNDARY_QA", edges["audited_transitions"],
@@ -582,6 +610,9 @@ def main(request_file: Path) -> None:
             "conditioning_verified": False,
             "visual_qa_approved": False,
             "review_path": str(folder / "visual-continuity-review.json"),
+            "contact_sheet": str(contact_sheet),
+            "review_priority": edges["review_priority"],
+            "visual_content_review_required": True,
         }
         report = upload_to_r2(clip, report)
         (folder / "final" / "AUTOMATED_TECHNICAL_QA.json").write_text(

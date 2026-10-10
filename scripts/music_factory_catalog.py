@@ -92,15 +92,19 @@ SELECT row_to_json(t)::text FROM (
   AND NOT EXISTS (SELECT 1 FROM media_video_autopilot x WHERE x.clip_id=q.clip_id
     AND x.stage NOT IN ('FAILED_RETRYABLE'))
  ORDER BY q.priority DESC,q.created_at,q.queue_id
- LIMIT 25
+ LIMIT 250
 ) t
 """
 
 
 def _mp3_song_candidate(*, catalog: dict | None = None) -> dict | None:
-    from scripts.music_factory_lyrics_story import qualified_catalog_lyrics
+    from scripts.music_factory_lyrics_story import (
+        qualified_catalog_lyrics, lyric_lines, _choose_lyrics, _lyric_stage,
+    )
 
     catalog = _catalog() if catalog is None else catalog
+    best = None
+    best_grounded = 0
     for line in psql(SQL_MP3_SONGS):
         row = json.loads(line)
         ident = str(row.get("clip_id") or "")
@@ -125,8 +129,26 @@ def _mp3_song_candidate(*, catalog: dict | None = None) -> dict | None:
         lyrics = qualified_catalog_lyrics(catalog, ident, str(row.get("title") or ""))
         if not lyrics:
             continue
-        return {
+        lyric_evidence = lyric_lines(lyrics)
+        cues = [
+            text for act in range(10)
+            for _, text in _choose_lyrics(lyric_evidence, act)
+        ]
+        grounded = sum(
+            not _lyric_stage(text)[0].startswith(
+                "pauses in a physically believable reflective gesture"
+            )
+            for text in cues
+        )
+        # Preference ranking is bounded to the existing queued catalog window.
+        # Do not spend thirty expensive motion jobs on mostly generic scenes.
+        if grounded < 15 or grounded <= best_grounded:
+            continue
+        best_grounded = grounded
+        best = {
             "has_work": True,
+            "lyric_grounded_shots": grounded,
+            "lyric_director_status": "DETERMINISTIC_PARTIAL_GROUNDING",
             "clip_id": ident,
             "queue_id": int(row["queue_id"]),
             "title": str(row["title"]).strip(),
@@ -150,7 +172,7 @@ def _mp3_song_candidate(*, catalog: dict | None = None) -> dict | None:
             "public_post_allowed": False,
             "status": "READY_FOR_DRAFT",
         }
-    return None
+    return best
 
 
 # Strict direction: q.project_type and music_assets.make_instrumental must agree.
