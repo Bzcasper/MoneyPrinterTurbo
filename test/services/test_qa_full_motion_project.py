@@ -1,6 +1,5 @@
 import json
 import subprocess
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -14,9 +13,11 @@ def test_rejects_unsafe_project_id():
 
 
 def test_missing_master_rejected(tmp_path):
-    with patch('scripts.qa_full_motion_project.TYPEBEAT_OUTPUT_ROOT',tmp_path):
-        with pytest.raises(ValueError,match='missing'):
-            verify_project('missing')
+    with (
+        patch('scripts.qa_full_motion_project.TYPEBEAT_OUTPUT_ROOT', tmp_path),
+        pytest.raises(ValueError, match='missing'),
+    ):
+        verify_project('missing')
 
 
 def test_visual_qa_sets_review_hold_not_publish(tmp_path):
