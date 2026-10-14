@@ -29,6 +29,51 @@ Working notes (local):
 4. Download: GET /api/v1/download/<video_path> or stream.
 5. Optional: POST /api/v1/social-metadata for captions; upload to other platforms.
 
+## DIY Longform Factory (replaces the n8n "DIY Longform Factory" render hop)
+
+The old n8n workflow 6WLXL0NItkqrm7CI planned scenes/chapters in n8n, then shipped a
+job to a Modal service for rendering. That render hop is now native to MPT: the
+chapter/scene *planning* and *run logging* live in
+`app/services/diy_factory.py`, and the *render* uses this repo's own
+`app/services/video_project.py` (deterministic FFmpeg, no external service or
+credential).
+
+Run the full chain from the repo root:
+
+```bash
+# Offline smoke test (built-in fixture plan + synthetic clip, no provider/network):
+uv run --locked python -m scripts.diy_factory --demo \
+  --topic "Build a birdhouse" --vertical diy \
+  --project-dir storage/projects/birdhouse
+
+# Real run (configured LLM + your prepared scene media):
+uv run --locked python -m scripts.diy_factory \
+  --topic "Build a birdhouse" --vertical diy --llm oneapi \
+  --media-dir /path/to/prepared/scenes \
+  --project-dir storage/projects/birdhouse \
+  --openmontage-root /home/bobby/projects/OpenMontage
+```
+
+`--media-dir` must contain `scene-NNN.mp4` (footage) and optional
+`scene-NNN.mp3` (narration audio) per scene number. Planning output, the
+readiness gate result, and a run-log line are persisted under
+`<project-dir-parent>/factory-runs/` (one JSON per run + append-only
+`runs.jsonl`), replacing the workflow's ~20 n8n DataTable nodes.
+
+Each preset's `production` block in `app/services/verticals.py` carries the art
+style / visual bible, chapter+scene targets, render settings (resolution, fps,
+transition, volumes) and QA gates for that vertical.
+
+### OpenMontage output multiplier
+
+OpenMontage (cloned at `/home/bobby/projects/OpenMontage`) multiplies one master
+into many shorts/derivatives. Passing `--openmontage-root` writes a
+`projects/<project-id>/` scaffold (`project.json`, `artifacts/script.json`,
+`artifacts/scene_plan.json`, plus `master_video`) that the OpenMontage agent
+picks up, and computes a shorts plan (scene windows mapped to its `clip-factory`
+pipeline). It never publishes automatically; the OpenMontage agent runs its own
+checkpoints.
+
 ## Tips
 - Check /docs (Swagger) at http://<host>:8090/docs for exact schemas.
 - API key auth currently disabled on local; enable in config for production.
