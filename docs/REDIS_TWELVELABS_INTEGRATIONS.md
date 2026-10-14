@@ -2,17 +2,39 @@
 
 ## Current deployment
 
-- Dedicated Docker **Redis 7** container: `mpt-redis`, bound **only to ROG 127.0.0.1:6381**, with a 48-byte locally generated password, AOF persistence, `maxmemory 256mb`, and `noeviction` to protect queued jobs.
-- Redis data: `/home/bobby/.local/share/mpt-redis/data`; Redis configuration and secret: `/home/bobby/.config/mpt-redis/redis.conf` and `mpt-redis.env` (mode 0600). None are committed.
+- Dedicated local **Redis 8.0.5** server (`/home/bobby/.local/redis-rootless/redis-server-bin`), bound **only to ROG 127.0.0.1:6381**, with a locally generated password, AOF persistence, `maxmemory 256mb`, and `noeviction` to protect queued jobs. The password was rotated on 2026-10-14 and is stored only in the private env file and local Redis config.
+- Redis data: `/home/bobby/.local/share/mpt-redis/data`; Redis configuration and secret: `/home/bobby/.config/mpt-redis/redis.local.conf` and `/home/bobby/.config/mpt-redis/mpt-redis.env` (mode 0600). None are committed.
 - The API's task-state `RedisState` and atomic `RedisTaskManager` both use `app.config.runtime_integrations.redis_settings()` and the same environment config. New state is Redis-backed; this is separate from the existing PostgreSQL/n8n music-library dispatch queue.
-- Runtime unit drop-in: `~/.config/systemd/user/mpt-api.service.d/20-runtime-integrations.conf`; versioned sample at `deploy/systemd/mpt-api.service.d/20-runtime-integrations.conf`. The preflight checks Redis before service startup; `KillMode=process` in the existing companion drop-in preserves detached video workers during API restarts.
-- Health checks passed: authenticated Redis PING, write/read/delete, persistent AOF, actual RedisState hash and RedisTaskManager Lua atomic-queue admission in isolated DB 1, API `GET /api/v1/tasks` (HTTP 200) after restarting with Redis settings. DB 0 is the live application DB.
+- Launch path for local API/WebUI processes is the private env file plus the checked-in `webui.sh`/`main.py`. Versioned systemd drop-in: `deploy/systemd/mpt-api.service.d/20-runtime-integrations.conf`. The preflight checks Redis before service startup; `KillMode=process` in the companion drop-in preserves detached video workers during API restarts.
+- Health checks passed on 2026-10-14: authenticated Redis PING, API PING, `GET /api/v1/tasks` (HTTP 200), `RedisState` write/read/delete through `GET /api/v1/tasks/{id}` and DELETE, AOF restore, and Redis test suites. DB 0 is the live application DB.
+
+## Local Redis start (user-level, no sudo)
+
+```bash
+export LD_LIBRARY_PATH=/home/bobby/.local/redis-rootless/liblzf/usr/lib/x86_64-linux-gnu
+/home/bobby/.local/redis-rootless/redis-server-bin \
+  /home/bobby/.config/mpt-redis/redis.local.conf \
+  --daemonize yes \
+  --pidfile /tmp/opencode/mpt-redis-6381.pid \
+  --logfile /tmp/opencode/mpt-redis-6381-rootless.log
+```
+
+Run the API and WebUI with the private env files loaded:
+
+```bash
+set -a
+. /home/bobby/.config/mpt-redis/mpt-redis.env
+. /home/bobby/.config/mpt-redis/mpt-twelvelabs.env
+set +a
+cd /home/bobby/projects/MoneyPrinterTurbo
+PYTHONPATH=/home/bobby/projects/MoneyPrinterTurbo .venv/bin/python main.py
+```
 
 ## TwelveLabs integration
 
 - SDK `twelvelabs==1.2.8` installed in the ROG MoneyPrinterTurbo `.venv`, matching `uv.lock` and the optional `pyproject.toml` TwelveLabs extra.
 - Existing `app/services/twelvelabs.py` supports **Marengo text embeddings/reranking** (search-material relevance) and **Pegasus video description/QA** of a suitable publicly accessible or explicitly shared video URL.
-- SDK method signatures and `VideoContext_Url` checked offline; **an authenticated TwelveLabs API call has not been made because no API key is installed.**
+- SDK method signatures, resource wrappers, and `VideoContext_Url` were checked offline on 2026-10-14. A locally configured key is present and `MPT_TWELVELABS_RERANK_TERMS=1`, so reranking is enabled for future pipeline runs. An authenticated Marengo smoke call completed on 2026-10-14 and returned a finite, nonzero 512-dim vector; no media upload, Pegasus analysis, or publishing action was performed.
 - Credentials are read only at runtime from `/home/bobby/.config/mpt-redis/mpt-twelvelabs.env` (mode 0600), never placed in `config.app` or WebUI-saved `config.toml`. Supported variables:
 
 ```ini
@@ -24,7 +46,7 @@ MPT_TWELVELABS_PEGASUS_MODEL=pegasus1.5
 
 For multiple keys, `MPT_TWELVELABS_API_KEYS=keyA,keyB` is supported (round-robin). Do not put real credentials in Git, tickets, or chat messages. Obtain the key from the official TwelveLabs dashboard. Enable paid embedding/reranking only after reviewing your TwelveLabs quota and pricing: set `MPT_TWELVELABS_RERANK_TERMS=1` in the private env file. The Pegasus helper also requires a reachable video URL and access permissions; never make private or unapproved footage public just to run QA.
 
-Restart during a controlled handoff: `XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user restart mpt-api.service`; check worker PID and `/api/v1/internal/type-beat/factory/status` afterward. To independently run preflight, load your private Redis env file, then run `.venv/bin/python -m scripts.integrations_preflight`. Preflight intentionally returns `MPT_TWELVELABS_DISABLED_NO_KEY` until an API key is set.
+Restart during a controlled handoff: if the user unit exists, `XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user restart mpt-api.service`; check worker PID and `/api/v1/internal/type-beat/factory/status` afterward. Current local processes are started manually with the private env files until the systemd unit is installed. To independently run preflight, load your private Redis env file, then run `.venv/bin/python -m scripts.integrations_preflight`. Preflight returns `MPT_TWELVELABS_SDK_READY_KEY_CONFIGURED_API_NOT_CALLED` now that a key is configured.
 
 ## Operational boundaries
 
@@ -46,7 +68,7 @@ cd /home/bobby/projects/MoneyPrinterTurbo
   --video /home/bobby/Videos/scene-director/automatic/autovideo_caf9188877ba40adbf57d627b4f39c8f/final/autovideo_caf9188877ba40adbf57d627b4f39c8f-review.mp4
 ```
 
-The offline smoke test verified that real private review video as a 64,345,478-byte, 195.75-second MP4 with SHA-256 `f5fed78ae42796e6d014112118da17bca107b804204a7ab042a46a153c0c7899`.
+The offline smoke test verified that real private review video as a 64,345,478-byte, 195.75-second MP4 with SHA-256 `f5fed78ae42796e6d014112118da17bca107b804204a7ab042a46a153c0c7899`. Re-running it on 2026-10-14 returned `review_status: OFFLINE_PREFLIGHT_ONLY`, `twelvelabs_key_configured: true`, and `remote_upload_permitted: false`; no media left the machine.
 
 **Only after a valid TwelveLabs API key is supplied and you approve usage:**
 
