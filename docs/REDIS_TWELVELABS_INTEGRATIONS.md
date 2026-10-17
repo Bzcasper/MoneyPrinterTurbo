@@ -84,8 +84,37 @@ set +a
 
 `--allow-remote-upload` is **required** even when credentials exist; this will send private copyrighted media and potentially lyric excerpts to TwelveLabs and may use a free quota or incur billable usage. The action is never invoked by the hourly music-video scheduler. The tool rejects MP4s outside the local factory directory, rejects files larger than 200 MB and durations outside 4 seconds to 1 hour, and checks for a configured API key before contacting the SDK. On successful upload it immediately saves the asset ID to a per-video private report (0600); future retries reuse that asset instead of uploading again. Once the same SHA-verified video and review prompt are analyzed, repeat calls reuse the completed report instead of calling the API again.
 
-For original lyric songs, the review prompt includes the thirty ordered canonical lyric excerpts from `story.json` as **untrusted reference evidence**. It asks Pegasus to report visible correspondence to lyrics, inconsistent people/outfits/locations, and unwanted text. Pegasus does not receive authority to approve creative QA or public publishing, and both flags stay explicitly false. If TwelveLabs has no key, `--allow-remote-upload` must fail before upload or billing. An actual authenticated TwelveLabs request has **not yet been completed**.
+For original lyric songs, the review prompt includes the thirty ordered canonical lyric excerpts from `story.json` as **untrusted reference evidence**. It asks Pegasus to report visible correspondence to lyrics, inconsistent people/outfits/locations, and unwanted text. Pegasus does not receive authority to approve creative QA or public publishing, and both flags stay explicitly false. If TwelveLabs has no key, `--allow-remote-upload` must fail before upload or billing. An authenticated Marengo text-embedding smoke call completed on 2026-10-14, but no private review video upload or Pegasus analysis was performed.
 
 Official API references:
 - https://docs.twelvelabs.io/sdk-reference/python/upload-files/direct-uploads
 - https://docs.twelvelabs.io/docs/guides/analyze-videos-and-images/videos
+
+## Generated-video QA gate (phase 1)
+
+`app/services/twelvelabs_qa.py` adds an opt-in QA stage after final videos are rendered and before cross-platform publishing. It is off by default. It never deletes a generated video and never marks video rendering failed.
+
+Configuration is environment-first, so no credentials or paid-call approvals are persisted in `config.toml`:
+
+```bash
+MPT_TWELVELABS_QA_MODE=off|report|gate
+MPT_TWELVELABS_QA_UPLOAD=0|1
+MPT_TWELVELABS_QA_MAX_TOKENS=2048
+MPT_TWELVELABS_QA_MAX_POLLS=36
+MPT_TWELVELABS_QA_POLL_INTERVAL_SECONDS=5
+```
+
+- `report` runs QA and stores reports but does not block publishing.
+- `gate` runs QA and blocks cross-posting unless every reviewed video returns both `verdict: "pass"` and `publishing_ready: true`.
+- `MPT_TWELVELABS_QA_UPLOAD=1` is required before any media is uploaded. In `gate` mode without this explicit approval, publishing is fail-closed and reports `remote_upload_not_approved`.
+- Reports are stored as private `0600` files at `storage/tasks/<task_id>/twelvelabs-qa-<video_index>.json` and summarized in `script.json` under `twelvelabs_review`.
+- Task API/WebUI responses include `twelvelabs_review` and a `twelvelabs_qa_blocked` warning when gate mode blocks publishing.
+
+Live enabling example:
+
+```bash
+export MPT_TWELVELABS_QA_MODE=report
+export MPT_TWELVELABS_QA_UPLOAD=1
+```
+
+Do not use `gate` with private, copyrighted, personal, or otherwise restricted footage unless remote processing of that footage is explicitly authorized. TwelveLabs has duration/file-size limits and paid usage may apply.
