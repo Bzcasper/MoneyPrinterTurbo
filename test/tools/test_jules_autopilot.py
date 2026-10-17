@@ -136,6 +136,7 @@ def test_jules_pagination_deduplicates_and_detects_cycle():
         ]
     )
     assert len(autopilot.Jules(client).sessions()) == 2
+    assert "pageSize=50" in client.calls[0][1]
     assert client.calls[1][1].endswith("pageToken=next%20page")
     cyclic = FakeClient(
         [
