@@ -9,8 +9,7 @@
   "categories": ["hardening", "stability", "enhancement", "performance", "tests"],
   "required_checks": [
     "Python 3.11 tests",
-    "Python 3.13 tests",
-    "Windows smoke tests"
+    "Python 3.13 tests"
   ],
   "max_changed_files": 12,
   "max_diff_lines": 800,

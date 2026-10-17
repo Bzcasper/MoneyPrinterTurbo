@@ -1,10 +1,12 @@
 """Song footage must be grounded in real, verified lyrics, not a mood slideshow."""
-from unittest.mock import patch
-import json
+
 import pytest
 
 from scripts.music_factory_lyrics_story import (
-    lyric_lines, qualified_catalog_lyrics, build_lyric_story, BIBLE,
+    BIBLE,
+    build_lyric_story,
+    lyric_lines,
+    qualified_catalog_lyrics,
 )
 from scripts.music_factory_worker import generated_prompt
 

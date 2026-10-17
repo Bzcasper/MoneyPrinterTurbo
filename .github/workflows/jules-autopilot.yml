@@ -33,7 +33,9 @@ jobs:
       github.repository == 'Bzcasper/MoneyPrinterTurbo' &&
       (github.event_name != 'workflow_run' ||
        github.event.workflow_run.head_repository.full_name == github.repository)
-    runs-on: ubuntu-latest
+    # Self-hosted: the controller is stdlib-only Python, and hosted runners are
+    # currently blocked by the account billing lock.
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 10
     env:
       JULES_API_KEY: ${{ secrets.JULES_API_KEY }}

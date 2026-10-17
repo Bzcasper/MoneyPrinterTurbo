@@ -13,24 +13,18 @@ concurrency:
 jobs:
   tests:
     name: Python ${{ matrix.python-version }} tests
-    runs-on: ubuntu-latest
+    # Self-hosted only for same-repo events: this runner is a personal
+    # machine, so fork PRs must never execute code on it.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 30
 
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.13"]
-
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
 
     env:
       MPT_TEST_REDIS_HOST: 127.0.0.1
@@ -40,6 +34,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Start local test Redis on 6379
+        run: |
+          redis-server --port 6379 --save '' --appendonly no \
+            --daemonize yes --pidfile /tmp/mpt-ci-redis-6379.pid --dir /tmp
+          redis-cli -p 6379 ping
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -70,16 +70,17 @@ jobs:
         # 测试，避免测试文件已存在但 CI 没有真正执行。
         run: uv run --no-sync python -X utf8 -m coverage run -m pytest -q test
 
-      # Keep the legacy suite's portable media backend selection unchanged.
-      # Native project rendering is a separate mandatory pass after installing
-      # system tools; append its coverage before enforcing the shared threshold.
-      - name: Install FFmpeg for native revision-rendering tests
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      # Native project rendering is a separate mandatory pass; the self-hosted
+      # runner ships FFmpeg, so verify instead of installing.
+      - name: Verify FFmpeg for native revision-rendering tests
+        run: |
+          command -v ffmpeg
+          ffmpeg -version | head -1
 
       - name: Run native revision-rendering tests
         run: >-
           uv run --no-sync python -X utf8 -m coverage run --append -m pytest -q
-          test/services/test_video_project.py
+          test/services/test_video_project.py test/services/test_minimax_output_container.py
 
       - name: Report test coverage
         run: uv run --no-sync python -m coverage report
@@ -96,6 +97,12 @@ jobs:
 
   windows-smoke:
     name: Windows smoke tests
+    # Hosted Windows runners are currently blocked by the account billing lock;
+    # this job stays defined so coverage can be restored by flipping the label
+    # back to windows-latest once billing is resolved.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
     timeout-minutes: 30
 

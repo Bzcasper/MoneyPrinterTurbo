@@ -8,7 +8,8 @@ import os
 import re
 import shutil
 import sys
-from typing import TYPE_CHECKING, Any, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from loguru import logger
@@ -1105,7 +1106,8 @@ def _load_batch_manifest(raw_path: str) -> tuple[str, list[dict[str, Any]]]:
 
     for index, entry in enumerate(entries, start=1):
         if not isinstance(entry, dict):
-            raise ValueError(f"batch task {index} must be a JSON object")
+            # Invalid JSON input is reported through the CLI's ValueError contract.
+            raise ValueError(f"batch task {index} must be a JSON object")  # noqa: TRY004
     return manifest_path, entries
 
 
@@ -1666,7 +1668,7 @@ def _run_batch_tasks(args: argparse.Namespace, tasks: list[VideoParams]) -> int:
                 stop_at=args.stop_at,
                 allow_server_file_input=True,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - isolate provider failures per batch item
             failed_stage = "runtime"
             error = str(exc)
             logger.exception(
@@ -1749,7 +1751,7 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             # task service's secure default for API and WebUI callers.
             allow_server_file_input=True,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - convert provider failures to CLI exit status
         logger.exception(
             f"CLI task failed with an unexpected error: task_id={task_id}, error={exc}"
         )
@@ -1761,6 +1763,8 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             f"CLI task failed: task_id={task_id}, stop_at={args.stop_at}, "
             f"stage={failed_stage}, error={error}"
         )
+        if result and result.get("videos"):
+            print(json.dumps({"task_id": task_id, "result": result}, ensure_ascii=False))
         return 1
 
     print(json.dumps({"task_id": task_id, "result": result}, ensure_ascii=False))

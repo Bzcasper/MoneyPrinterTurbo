@@ -163,7 +163,9 @@ class Jules:
     def sessions(self):
         result, tokens, token = {}, set(), ""
         for _ in range(MAX_PAGES):
-            path = "/sessions?pageSize=100"
+            # Keep pages below MAX_RESPONSE_BYTES: a 100-session page of the
+            # full session resource exceeded the 4 MB cap once history grew.
+            path = "/sessions?pageSize=50"
             if token:
                 path += "&pageToken=" + escaped(token)
             page = self.client.request("GET", path)

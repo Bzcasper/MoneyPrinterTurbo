@@ -29,6 +29,7 @@ from app.services import (
     subtitle,
     task_artifacts,
     twelvelabs,
+    twelvelabs_qa,
     video,
     verticals,
     volcengine_seedance,
@@ -61,6 +62,8 @@ _ACTIVE_CROSS_POST_STATES = {
 }
 _CROSS_POST_STATE_WRITE_ATTEMPTS = 3
 _CROSS_POST_STATE_RETRY_DELAY_SECONDS = 0.1
+_TASK_FAILURE_STATE_WRITE_ATTEMPTS = 3
+_TASK_FAILURE_STATE_RETRY_DELAY_SECONDS = 0.1
 _LOOMLOOM_STATE_WRITE_ATTEMPTS = 3
 _LOOMLOOM_STATE_RETRY_DELAY_SECONDS = 0.1
 _INTERRUPTED_CROSS_POST_ERROR = (
@@ -93,11 +96,22 @@ _VIDEO_MUSIC_PROVIDERS = {
 }
 
 
-_SUPPORTED_VIDEO_SOURCES = frozenset({
-    "pexels", "pixabay", "coverr", "local", "wavespeed",
-    "volcengine_seedance", "ofox", "metaso_minimax", "muapi",
-    "loomloom", "openai_image", "firefly",
-})
+_SUPPORTED_VIDEO_SOURCES = frozenset(
+    {
+        "pexels",
+        "pixabay",
+        "coverr",
+        "local",
+        "wavespeed",
+        "volcengine_seedance",
+        "ofox",
+        "metaso_minimax",
+        "muapi",
+        "loomloom",
+        "openai_image",
+        "firefly",
+    }
+)
 
 
 def _get_video_music_prompt(params: VideoParams) -> str:
@@ -284,18 +298,37 @@ def _mark_task_failed(
     }
     # 某些外部任务已经创建了可用于恢复或排障的远端 ID。失败状态需要保留
     # 这些非敏感字段，但不能允许调用方覆盖统一的状态、进度和错误结构。
+    # Keep completed batch outputs in both the persisted state and the direct
+    # return value used by the CLI. These fields are reset before a new attempt.
     failure_details = {
-        key: value for key, value in dict(details or {}).items() if key not in failure
+        key: existing_task[key]
+        for key in ("videos", "combined_videos", "warnings", "failed_video_index")
+        if existing_task and key in existing_task
     }
-    failure.update(failure_details)
-    sm.state.update_task(
-        task_id,
-        state=failure["state"],
-        progress=failure["progress"],
-        failed_stage=failure["failed_stage"],
-        error=failure["error"],
-        **failure_details,
+    failure_details.update(
+        {key: value for key, value in dict(details or {}).items() if key not in failure}
     )
+    failure.update(failure_details)
+    fields = {key: value for key, value in failure.items() if key != "task_id"}
+    for attempt in range(_TASK_FAILURE_STATE_WRITE_ATTEMPTS):
+        try:
+            if attempt == 0:
+                sm.state.update_task(task_id, **fields)
+            else:
+                # A lost acknowledgement may mean the first write succeeded.
+                # Patch only an existing record so retries cannot revive a task
+                # that the user has since deleted.
+                sm.state.patch_task(task_id, **fields)
+            break
+        except Exception as exc:
+            if attempt + 1 == _TASK_FAILURE_STATE_WRITE_ATTEMPTS:
+                logger.exception(
+                    f"failed to persist task failure, task_id: {task_id}, error: {exc}"
+                )
+            else:
+                time.sleep(_TASK_FAILURE_STATE_RETRY_DELAY_SECONDS)
+    # A state outage must not discard the only completed-file snapshot held by
+    # the caller. Return it even when all bounded persistence attempts fail.
     return failure
 
 
@@ -351,8 +384,13 @@ def generate_script(task_id, params):
 
 
 def _materials_follow_script(params) -> bool:
-    return params.match_materials_to_script or video.is_diy_step_mode(params) or (
-        params.video_source == "firefly" and (params.firefly_scene_prompts or params.firefly_hero_shot)
+    return (
+        params.match_materials_to_script
+        or video.is_diy_step_mode(params)
+        or (
+            params.video_source == "firefly"
+            and (params.firefly_scene_prompts or params.firefly_hero_shot)
+        )
     )
 
 
@@ -365,14 +403,17 @@ def generate_terms(task_id, params, video_script):
         # 无法改善“后面内容的画面提前出现”的问题。
         terms_prompt = (
             verticals.get_vertical(params.content_vertical)["terms_prompt"]
-            if params.video_source == "firefly" else ""
+            if params.video_source == "firefly"
+            else ""
         )
         terms_options = {"terms_prompt": terms_prompt} if terms_prompt else {}
         params.firefly_scene_prompts = bool(terms_prompt)
         terms_amount = (
             max(1, len(voice.split_script_paragraphs(video_script)))
             if video.is_diy_step_mode(params)
-            else 8 if params.match_materials_to_script else 5
+            else 8
+            if params.match_materials_to_script
+            else 5
         )
         video_terms = llm.generate_terms(
             video_subject=params.video_subject,
@@ -389,12 +430,16 @@ def generate_terms(task_id, params, video_script):
                     try:
                         video_terms = json.loads(video_terms)
                     except json.JSONDecodeError as exc:
-                        raise ValueError("scene prompts must be a JSON array or one per line") from exc
+                        raise ValueError(
+                            "scene prompts must be a JSON array or one per line"
+                        ) from exc
                 else:
                     video_terms = video_terms.splitlines()
             else:
                 video_terms = re.split(r"[,，]", video_terms)
-        if not isinstance(video_terms, list) or not all(isinstance(term, str) for term in video_terms):
+        if not isinstance(video_terms, list) or not all(
+            isinstance(term, str) for term in video_terms
+        ):
             raise ValueError("video_terms must be a string or a list of strings.")
 
         # Delimiter-only input must not reach paid reranking or material search.
@@ -568,19 +613,25 @@ def generate_type_beat_metadata(params, video_script: str, bpm: float = 0.0) -> 
         facts.append(f"Genre: {params.beat_genre}")
     if params.beat_lease_url:
         facts.append(f"Lease link: {params.beat_lease_url}")
-    facts.extend([
-        "Write title, tags and description for this instrumental beat. "
-        "Use only these facts; do not name artists, quote lyrics, or invent licensing rights.",
-        f"Visual concept: {video_script}",
-    ])
+    facts.extend(
+        [
+            "Write title, tags and description for this instrumental beat. "
+            "Use only these facts; do not name artists, quote lyrics, or invent licensing rights.",
+            f"Visual concept: {video_script}",
+        ]
+    )
     metadata = llm.generate_social_metadata(
         video_subject=params.beat_title or params.video_subject,
         video_script="\n".join(facts),
         language=params.video_language or "",
         platform="youtube_shorts",
     )
-    if params.beat_lease_url and params.beat_lease_url not in metadata.get("caption", ""):
-        metadata["caption"] = f"{metadata.get('caption', '').rstrip()}\n\nLease: {params.beat_lease_url}".strip()
+    if params.beat_lease_url and params.beat_lease_url not in metadata.get(
+        "caption", ""
+    ):
+        metadata["caption"] = (
+            f"{metadata.get('caption', '').rstrip()}\n\nLease: {params.beat_lease_url}".strip()
+        )
     return metadata
 
 
@@ -718,7 +769,9 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
         )
         return ""
 
-    is_word_level = getattr(params, "subtitle_display_mode", "sentence") == "word_by_word"
+    is_word_level = (
+        getattr(params, "subtitle_display_mode", "sentence") == "word_by_word"
+    )
 
     # A failed retry must never reuse captions from an earlier narration.
     with staged_subtitle_file(final_subtitle_path) as subtitle_path:
@@ -850,7 +903,8 @@ def get_video_materials(
         # 轮询，避免某个早期关键词下载太多素材，把后续脚本主题挤出最终时间线。
         scene_options = (
             {"firefly_scene_prompts": True}
-            if params.video_source == "firefly" and params.firefly_scene_prompts else {}
+            if params.video_source == "firefly" and params.firefly_scene_prompts
+            else {}
         )
         if step_durations is not None:
             scene_options["firefly_clip_durations"] = step_durations
@@ -868,7 +922,8 @@ def get_video_materials(
                     else params.video_concat_mode
                 ),
                 audio_duration=(
-                    audio_duration if step_durations is not None
+                    audio_duration
+                    if step_durations is not None
                     else audio_duration * params.video_count
                 ),
                 max_clip_duration=params.video_clip_duration,
@@ -903,7 +958,9 @@ def get_video_materials(
             # leave its ID in task state. Earlier successful clips cannot turn
             # this incomplete run into an apparently completed video task.
             prediction_id = str(getattr(exc, "prediction_id", "") or "").strip()
-            details = {"wavespeed_prediction_id": prediction_id} if prediction_id else None
+            details = (
+                {"wavespeed_prediction_id": prediction_id} if prediction_id else None
+            )
             _mark_task_failed(task_id, "materials", str(exc), details=details)
             return None
         except material.OpenAIImagePaidResultError as exc:
@@ -915,9 +972,7 @@ def get_video_materials(
             # 与方舟同一恢复语义：未确认状态和已生成但下载失败都对应一个可在
             # OFox 控制台恢复的远端任务，统一从异常携带的 task_id 写入失败状态。
             remote_task_id = str(getattr(exc, "task_id", "") or "").strip()
-            details = (
-                {"ofox_task_id": remote_task_id} if remote_task_id else None
-            )
+            details = {"ofox_task_id": remote_task_id} if remote_task_id else None
             _mark_task_failed(
                 task_id,
                 "materials",
@@ -1009,7 +1064,9 @@ def _record_loomloom_run_reference(
 def _get_material_source_groups(task_id: str, video_paths: list[str]) -> dict[str, str]:
     """Recover keyword groups from the downloaded material manifest."""
     try:
-        with open(path.join(utils.task_dir(task_id), "script.json"), encoding="utf-8") as file:
+        with open(
+            path.join(utils.task_dir(task_id), "script.json"), encoding="utf-8"
+        ) as file:
             payload = json.load(file)
         groups = {
             record["local_file"]: record["search_term"]
@@ -1025,26 +1082,50 @@ def _get_material_source_groups(task_id: str, video_paths: list[str]) -> dict[st
             if path.basename(file) in groups
         }
     except (OSError, ValueError, AttributeError, TypeError) as exc:
-        logger.warning(f"Cannot read material keyword groups: task_id={task_id}, error={exc}")
+        logger.warning(
+            f"Cannot read material keyword groups: task_id={task_id}, error={exc}"
+        )
         return {}
 
 
 def generate_final_videos(
-    task_id, params, downloaded_videos, audio_file, subtitle_path, audio_duration,
+    task_id,
+    params,
+    downloaded_videos,
+    audio_file,
+    subtitle_path,
+    audio_duration,
+    *,
+    partial_results: dict | None = None,
     step_durations: list[float] | None = None,
 ):
+    """Record completed outputs even if a later clip raises before returning."""
     final_video_paths = []
     combined_video_paths = []
     warnings = []
+    if partial_results is not None:
+        # The caller owns this snapshot so it can report completed files even
+        # when the state backend fails during a progress/checkpoint write.
+        partial_results.update(
+            videos=final_video_paths,
+            combined_videos=combined_video_paths,
+            warnings=warnings,
+        )
     allocate_batch_materials = params.video_count > 1 and params.video_source in {
-        "pexels", "pixabay", "coverr", "local"
+        "pexels",
+        "pixabay",
+        "coverr",
+        "local",
     }
     source_usage = {}
     material_selections = []
     source_groups = (
         _get_material_source_groups(task_id, downloaded_videos)
-        if (allocate_batch_materials and _materials_follow_script(params)
-            and params.video_source != "local")
+        if (
+            allocate_batch_materials
+            and _materials_follow_script(params)
+            and params.video_source != "local"
+        )
         else {}
     )
     video_music_provider = _VIDEO_MUSIC_PROVIDERS.get(params.bgm_type)
@@ -1076,7 +1157,10 @@ def generate_final_videos(
                 }
             else:
                 beat_info = video.analyze_beat(
-                    audio_file, audio_duration, params.video_clip_duration, params.beat_bpm
+                    audio_file,
+                    audio_duration,
+                    params.video_clip_duration,
+                    params.beat_bpm,
                 )
             timed_options["cut_times"] = beat_info["cut_times"]
         task_artifacts.patch_script_data(task_id, beat_analysis=beat_info)
@@ -1093,12 +1177,16 @@ def generate_final_videos(
             raise ValueError("DIY paragraph holds must cover the narration")
         cuts[-1] = float(audio_duration)
         timed_options = {
-            "target_duration": audio_duration, "cut_times": cuts, "strict_cut_order": True,
+            "target_duration": audio_duration,
+            "cut_times": cuts,
+            "strict_cut_order": True,
         }
 
     _progress = 50
     for i in range(params.video_count):
         index = i + 1
+        if partial_results is not None:
+            partial_results["failed_video_index"] = index
         combined_video_path = path.join(
             utils.task_dir(task_id), f"combined-{index}.mp4"
         )
@@ -1110,7 +1198,8 @@ def generate_final_videos(
                 "source_groups": source_groups,
                 "used_video_paths": used_video_paths,
             }
-            if allocate_batch_materials else {}
+            if allocate_batch_materials
+            else {}
         )
         # 每条视频占 50% 进度中的一份，合成与最终编码各占一半。片段处理是
         # 合成里最耗时的部分，逐段推进这一半的进度。
@@ -1134,25 +1223,33 @@ def generate_final_videos(
         )
         if allocate_batch_materials:
             selected_sources = list(dict.fromkeys(used_video_paths))
-            reused_sources = [file for file in selected_sources if source_usage.get(file, 0)]
+            reused_sources = [
+                file for file in selected_sources if source_usage.get(file, 0)
+            ]
             for file in selected_sources:
                 source_usage[file] = source_usage.get(file, 0) + 1
-            material_selections.append({
-                "video_index": index,
-                "local_files": [path.basename(file) for file in used_video_paths],
-                "reused_files": [path.basename(file) for file in reused_sources],
-            })
-            task_artifacts.patch_script_data(task_id, material_selections=material_selections)
+            material_selections.append(
+                {
+                    "video_index": index,
+                    "local_files": [path.basename(file) for file in used_video_paths],
+                    "reused_files": [path.basename(file) for file in reused_sources],
+                }
+            )
+            task_artifacts.patch_script_data(
+                task_id, material_selections=material_selections
+            )
             logger.info(
                 f"Batch material allocation: video_index={index}, "
                 f"sources={len(selected_sources)}, reused_sources={len(reused_sources)}"
             )
             if reused_sources:
-                warnings.append({
-                    "code": "batch_materials_reused",
-                    "video_index": index,
-                    "count": len(reused_sources),
-                })
+                warnings.append(
+                    {
+                        "code": "batch_materials_reused",
+                        "video_index": index,
+                        "count": len(reused_sources),
+                    }
+                )
 
         _progress += 50 / params.video_count / 2
         sm.state.update_task(task_id, progress=_progress)
@@ -1215,11 +1312,16 @@ def generate_final_videos(
         if beat_mode:
             video.apply_type_beat_visuals(final_video_path, params, beat_info["bpm"])
 
-        _progress += 50 / params.video_count / 2
-        sm.state.update_task(task_id, progress=_progress)
-
         final_video_paths.append(final_video_path)
         combined_video_paths.append(combined_video_path)
+        _progress += 50 / params.video_count / 2
+        sm.state.update_task(
+            task_id,
+            progress=_progress,
+            videos=list(final_video_paths),
+            combined_videos=list(combined_video_paths),
+            warnings=list(warnings) or None,
+        )
 
     return final_video_paths, combined_video_paths, warnings
 
@@ -1389,8 +1491,12 @@ def _run_cross_post(
             )
             if publishing_settings:
                 metadata = verticals.apply_publishing_templates(
-                    metadata, publishing_settings,
-                    {**publishing_settings.get("template_values", {}), "subject": video_subject},
+                    metadata,
+                    publishing_settings,
+                    {
+                        **publishing_settings.get("template_values", {}),
+                        "subject": video_subject,
+                    },
                 )
             if has_youtube:
                 youtube_extra = {
@@ -1423,9 +1529,10 @@ def _run_cross_post(
                         "status": "processing",
                     }
                 )
-                if _patch_cross_post_state(
-                    task_id, cross_post_results=list(results)
-                ) is not True:
+                if (
+                    _patch_cross_post_state(task_id, cross_post_results=list(results))
+                    is not True
+                ):
                     logger.warning(
                         "could not persist background upload request ID: "
                         f"task_id={task_id}, request_id={request_id}"
@@ -1559,8 +1666,11 @@ def _schedule_cross_post(
 ) -> str | None:
     """提交后台发布任务；成功返回 None，调度失败返回可查询的错误原因。"""
     settings = (
-        verticals.get_publishing_settings(getattr(params, "content_vertical", "none"), config.app)
-        if publishing_settings is None else dict(publishing_settings)
+        verticals.get_publishing_settings(
+            getattr(params, "content_vertical", "none"), config.app
+        )
+        if publishing_settings is None
+        else dict(publishing_settings)
     )
     try:
         if settings:
@@ -1568,8 +1678,10 @@ def _schedule_cross_post(
     except ValueError as exc:
         error = f"invalid vertical publishing settings: {exc}"
         _patch_cross_post_state(
-            task_id, cross_post_state=const.CROSS_POST_STATE_FAILED,
-            cross_post_error=error, cross_post_owner=None,
+            task_id,
+            cross_post_state=const.CROSS_POST_STATE_FAILED,
+            cross_post_error=error,
+            cross_post_owner=None,
         )
         return error
     if not _cross_post_slots.acquire(blocking=False):
@@ -1592,22 +1704,30 @@ def _schedule_cross_post(
         if settings:
             if settings["username"]:
                 account["upload_post_username"] = settings["username"]
-            youtube_privacy_status = settings["youtube_privacy_status"] or youtube_privacy_status
+            youtube_privacy_status = (
+                settings["youtube_privacy_status"] or youtube_privacy_status
+            )
             bpm = getattr(params, "beat_bpm", 0.0)
             if getattr(params, "content_vertical", "none") == "type_beat":
-                analysis = task_artifacts.read_script_data(task_id).get("beat_analysis", {})
+                analysis = task_artifacts.read_script_data(task_id).get(
+                    "beat_analysis", {}
+                )
                 if isinstance(analysis, dict):
                     bpm = analysis.get("bpm", bpm)
             settings["template_values"] = {
                 "vertical": getattr(params, "content_vertical", "none"),
-                "bpm": f"{bpm:g}" if isinstance(bpm, (int, float)) and math.isfinite(bpm) and bpm > 0 else "",
+                "bpm": f"{bpm:g}"
+                if isinstance(bpm, (int, float)) and math.isfinite(bpm) and bpm > 0
+                else "",
                 "key": getattr(params, "beat_key", ""),
                 "genre": getattr(params, "beat_genre", ""),
                 "lease_url": getattr(params, "beat_lease_url", ""),
             }
             publish_options["publishing_settings"] = json.loads(json.dumps(settings))
         if publishing_metadata:
-            publish_options["publishing_metadata"] = json.loads(json.dumps(publishing_metadata))
+            publish_options["publishing_metadata"] = json.loads(
+                json.dumps(publishing_metadata)
+            )
         future = _cross_post_executor.submit(
             _run_cross_post_with_slot,
             task_id,
@@ -1653,11 +1773,27 @@ def _run_pipeline(
 ):
     logger.info(f"start task: {task_id}, stop_at: {stop_at}")
     sm.state.update_task(
-        task_id, state=const.TASK_STATE_PROCESSING, progress=5,
-        failed_stage=None, error=None,
+        task_id,
+        state=const.TASK_STATE_PROCESSING,
+        progress=5,
+        failed_stage=None,
+        error=None,
+        videos=[],
+        combined_videos=[],
+        warnings=None,
+        failed_video_index=None,
     )
 
-    if stop_at in {"materials", "video"} and params.video_source not in _SUPPORTED_VIDEO_SOURCES:
+    if stop_at == "video" and params.subtitle_enabled:
+        try:
+            video.validate_subtitle_colors(params)
+        except ValueError as exc:
+            return _mark_task_failed(task_id, "preflight", str(exc))
+
+    if (
+        stop_at in {"materials", "video"}
+        and params.video_source not in _SUPPORTED_VIDEO_SOURCES
+    ):
         return _mark_task_failed(
             task_id, "preflight", f"unsupported video source: {params.video_source!r}"
         )
@@ -1832,11 +1968,14 @@ def _run_pipeline(
             )
 
     if (
-        stop_at in {"materials", "video"} and video.is_diy_step_mode(params)
+        stop_at in {"materials", "video"}
+        and video.is_diy_step_mode(params)
         and len(video_terms) != len(voice.split_script_paragraphs(video_script))
     ):
         return _mark_task_failed(
-            task_id, "terms", "DIY Firefly requires one scene prompt per script paragraph"
+            task_id,
+            "terms",
+            "DIY Firefly requires one scene prompt per script paragraph",
         )
 
     save_script_data(task_id, video_script, video_terms, params)
@@ -1877,7 +2016,11 @@ def _run_pipeline(
     if stop_at == "audio":
         # Full video jobs apply gain in the final mixer. Audio-only exports have
         # no mixer, so apply it here to an owned output (never a custom input).
-        selected_volume = params.bgm_volume if video.is_beat_length_mode(params) else params.voice_volume
+        selected_volume = (
+            params.bgm_volume
+            if video.is_beat_length_mode(params)
+            else params.voice_volume
+        )
         audio_volume = 1.0 if selected_volume is None else float(selected_volume)
         if audio_volume != 1.0:
             descriptor, output_file = tempfile.mkstemp(
@@ -1886,15 +2029,21 @@ def _run_pipeline(
             os.close(descriptor)
             export_ready = False
             try:
-                export_ready = voice.apply_audio_volume(audio_file, output_file, audio_volume)
+                export_ready = voice.apply_audio_volume(
+                    audio_file, output_file, audio_volume
+                )
                 if not export_ready:
-                    return _mark_task_failed(task_id, "audio", "failed to apply audio export volume")
+                    return _mark_task_failed(
+                        task_id, "audio", "failed to apply audio export volume"
+                    )
             finally:
                 if not export_ready:
                     try:
                         os.remove(output_file)
                     except OSError as exc:
-                        logger.warning(f"failed to remove incomplete audio export: {exc}")
+                        logger.warning(
+                            f"failed to remove incomplete audio export: {exc}"
+                        )
             audio_file = output_file
         sm.state.update_task(
             task_id,
@@ -1929,7 +2078,9 @@ def _run_pipeline(
     # 5. Get video materials
     step_options = {}
     if video.is_diy_step_mode(params):
-        durations = voice.script_paragraph_durations(video_script, audio_duration, sub_maker)
+        durations = voice.script_paragraph_durations(
+            video_script, audio_duration, sub_maker
+        )
         step_options["step_durations"] = durations
         task_artifacts.patch_script_data(task_id, diy_step_durations=durations)
     downloaded_videos = get_video_materials(
@@ -1964,17 +2115,35 @@ def _run_pipeline(
         params.video_concat_mode = VideoConcatMode(params.video_concat_mode)
 
     # 6. Generate final videos
-    final_video_paths, combined_video_paths, generation_warnings = (
-        generate_final_videos(
-            task_id,
-            params,
-            downloaded_videos,
-            audio_file,
-            subtitle_path,
-            audio_duration,
-            **step_options,
+    partial_results = {}
+    try:
+        final_video_paths, combined_video_paths, generation_warnings = (
+            generate_final_videos(
+                task_id,
+                params,
+                downloaded_videos,
+                audio_file,
+                subtitle_path,
+                audio_duration,
+                partial_results=partial_results,
+                **step_options,
+            )
         )
-    )
+    except Exception as exc:
+        logger.exception(f"video batch failed, task_id: {task_id}, error: {exc}")
+        # Warnings for the failing clip do not describe any usable output.
+        completed_count = len(partial_results.get("videos", []))
+        partial_results["warnings"] = [
+            warning
+            for warning in partial_results.get("warnings", [])
+            if warning.get("video_index", 0) <= completed_count
+        ] or None
+        return _mark_task_failed(
+            task_id,
+            "video",
+            f"{type(exc).__name__}: {exc}",
+            details=partial_results,
+        )
 
     if not final_video_paths:
         return _mark_task_failed(
@@ -1983,13 +2152,25 @@ def _run_pipeline(
             "failed to generate final video",
         )
 
+    twelvelabs_reviews = twelvelabs_qa.review_final_videos(
+        task_id,
+        params,
+        video_script,
+        final_video_paths,
+    )
+    generation_warnings = list(generation_warnings or [])
+    generation_warnings.extend(twelvelabs_qa.blocked_warnings(twelvelabs_reviews))
+    qa_blocked_publishing = twelvelabs_qa.publishing_blocked(twelvelabs_reviews)
+
     publishing_metadata = None
     if video.is_beat_length_mode(params):
         beat_info = task_artifacts.read_script_data(task_id).get("beat_analysis", {})
         publishing_metadata = generate_type_beat_metadata(
             params, video_script, beat_info.get("bpm", params.beat_bpm)
         )
-        task_artifacts.patch_script_data(task_id, publishing_metadata=publishing_metadata)
+        task_artifacts.patch_script_data(
+            task_id, publishing_metadata=publishing_metadata
+        )
 
     logger.success(
         f"task {task_id} finished, generated {len(final_video_paths)} videos."
@@ -1997,7 +2178,9 @@ def _run_pipeline(
 
     # 7. 先完成视频生成任务，再按需提交跨平台发布。第三方上传可能耗时
     # 数分钟，不应阻塞视频结果返回，也不能反向影响已经生成的成片。
-    publishing_settings = verticals.get_publishing_settings(params.content_vertical, config.app)
+    publishing_settings = verticals.get_publishing_settings(
+        params.content_vertical, config.app
+    )
     publishing_service = upload_post.upload_post_service
     if publishing_settings.get("username"):
         account = publishing_service.snapshot_account()
@@ -2015,7 +2198,23 @@ def _run_pipeline(
         logger.warning(
             f"skip cross-post because no platforms are configured, task_id: {task_id}"
         )
-    cross_post_state = const.CROSS_POST_STATE_PENDING if should_cross_post else None
+    if qa_blocked_publishing and cross_post_enabled and bool(platforms):
+        # QA is fail-closed: a finished video can still be returned to the
+        # user, but a blocked video is never sent to publishing platforms.
+        logger.warning(
+            f"skip cross-post because TwelveLabs QA blocked publishing, "
+            f"task_id: {task_id}"
+        )
+        should_cross_post = False
+    cross_post_state = (
+        const.CROSS_POST_STATE_PENDING
+        if should_cross_post
+        else (
+            const.CROSS_POST_STATE_FAILED
+            if (cross_post_enabled and platforms and qa_blocked_publishing)
+            else None
+        )
+    )
 
     kwargs = {
         "videos": final_video_paths,
@@ -2028,9 +2227,14 @@ def _run_pipeline(
         "materials": downloaded_videos,
         "cross_post_state": cross_post_state,
         "cross_post_results": None,
-        "cross_post_error": None,
+        "cross_post_error": (
+            "publishing blocked by TwelveLabs QA" if qa_blocked_publishing else None
+        ),
         "cross_post_owner": _cross_post_process_owner if should_cross_post else None,
         "warnings": generation_warnings or None,
+        "twelvelabs_review": twelvelabs_qa.public_report(twelvelabs_reviews)
+        if twelvelabs_reviews
+        else None,
     }
     if publishing_metadata:
         kwargs["publishing_metadata"] = publishing_metadata
@@ -2052,8 +2256,16 @@ def _run_pipeline(
             youtube_made_for_kids=(
                 upload_post.upload_post_service.youtube_made_for_kids
             ),
-            **({"publishing_metadata": publishing_metadata} if publishing_metadata else {}),
-            **({"publishing_settings": publishing_settings} if publishing_settings else {}),
+            **(
+                {"publishing_metadata": publishing_metadata}
+                if publishing_metadata
+                else {}
+            ),
+            **(
+                {"publishing_settings": publishing_settings}
+                if publishing_settings
+                else {}
+            ),
         )
         # 队列满或线程池关闭属于同步可知的调度失败。任务状态已经由调度函数
         # 更新，这里同步修正返回快照，避免调用方收到与后续查询不一致的 pending。

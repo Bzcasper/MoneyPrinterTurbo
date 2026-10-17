@@ -24,12 +24,13 @@ import requests
 from edge_tts import SubMaker
 from edge_tts.srt_composer import Subtitle
 from loguru import logger
-from moviepy.video.tools import subtitles
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 from openai import OpenAI
 
 from app.config import config
+from app.services import bgm
 from app.utils import utils
+from app.utils.subtitle_reader import moviepy_subtitles
 from app.utils.subtitle_writer import staged_subtitle_file
 
 _DEFAULT_EDGE_TTS_TIMEOUT_SECONDS = 30.0
@@ -203,21 +204,57 @@ def get_elevenlabs_voices(api_key: str) -> list[str]:
         headers = {"xi-api-key": api_key}
         # Requests preserves custom xi-api-key headers across redirects. Keep
         # the key on the provider endpoint even if it responds with a redirect.
-        response = requests.get(
-            url, params=params, headers=headers, timeout=10, allow_redirects=False
-        )
-        if response.status_code != 200:
-            logger.warning(
-                f"ElevenLabs voices fetch failed with status {response.status_code}: {response.text}"
+        result = []
+        seen_voices = set()
+        seen_tokens = set()
+        deadline = time.monotonic() + 30.0
+        # v2 catalogs are paginated even when page_size is at its maximum.
+        # Retain the fixed endpoint and no-redirect credential boundary.
+        for _ in range(100):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.warning("ElevenLabs voice catalog time budget exhausted; returning partial catalog")
+                break
+            phase_timeout = min(10.0, remaining / 2.0)
+            response = requests.get(
+                url, params=dict(params), headers=headers,
+                timeout=(phase_timeout, phase_timeout), allow_redirects=False,
             )
-            return []
-        data = response.json()
-        voices = data.get("voices", [])
-        return [
-            f"elevenlabs:{v['voice_id']}:{v['name']}"
-            for v in voices
-            if v.get("voice_id") and v.get("name") and v.get("status") != "disabled"
-        ]
+            try:
+                if response.status_code != 200:
+                    logger.warning(
+                        f"ElevenLabs voices fetch failed with status {response.status_code}"
+                    )
+                    return []
+                data = response.json()
+            finally:
+                response.close()
+            if not isinstance(data, dict) or not isinstance(data.get("voices"), list):
+                return []
+            for entry in data["voices"]:
+                if not isinstance(entry, dict):
+                    continue
+                identity = entry.get("voice_id")
+                name = entry.get("name")
+                if (
+                    isinstance(identity, str) and identity
+                    and isinstance(name, str) and name
+                    and entry.get("status") != "disabled"
+                    and identity not in seen_voices
+                ):
+                    seen_voices.add(identity)
+                    result.append(f"elevenlabs:{identity}:{name}")
+            token = data.get("next_page_token")
+            if data.get("has_more") is not True or not isinstance(token, str) or not token:
+                break
+            if token in seen_tokens:
+                logger.warning("ElevenLabs voice catalog repeated a page token")
+                break
+            seen_tokens.add(token)
+            params["next_page_token"] = token
+        else:
+            logger.warning("ElevenLabs voice catalog page limit reached; returning partial catalog")
+        return result
     except Exception as e:
         logger.warning(f"ElevenLabs voices fetch failed: {str(e)}")
         return []
@@ -385,14 +422,18 @@ def parse_voice_name(name: str):
     # zh-CN-XiaoyiNeural-Female
     # zh-CN-YunxiNeural-Male
     # zh-CN-XiaoxiaoMultilingualNeural-V2-Female
-    name = name.replace("-Female", "").replace("-Male", "").strip()
+    name = name.strip()
+    # Qualified IDs belong to their provider. Gender/style display labels are
+    # parsed by each provider adapter, not rewritten inside an opaque voice ID.
+    if ":" not in name:
+        name = name.removesuffix("-Female").removesuffix("-Male")
     return name
 
 
 def is_azure_v2_voice(voice_name: str):
     voice_name = parse_voice_name(voice_name)
-    if voice_name.endswith("-V2"):
-        return voice_name.replace("-V2", "").strip()
+    if ":" not in voice_name and voice_name.endswith("-V2"):
+        return voice_name.removesuffix("-V2").strip()
     return ""
 
 
@@ -1717,6 +1758,7 @@ def siliconflow_tts(
                 sub_maker = ensure_legacy_submaker_fields(SubMaker())
 
                 try:
+                    _validate_remote_tts_audio(temporary_audio)
                     audio_clip = AudioFileClip(temporary_audio)
                     try:
                         audio_duration = audio_clip.duration
@@ -1824,6 +1866,9 @@ def azure_tts_v2(
         return 0
 
     for i in range(3):
+        temporary_audio = None
+        audio_config = None
+        speech_synthesizer = None
         try:
             logger.info(
                 f"start, voice name: {voice_name}, rate: {voice_rate}, try: {i + 1}"
@@ -1854,9 +1899,15 @@ def azure_tts_v2(
                 logger.error("Azure speech key or region is not set")
                 return None
 
-            audio_config = speechsdk.audio.AudioOutputConfig(
-                filename=voice_file, use_default_speaker=True
+            # File and default-speaker output are mutually exclusive SDK modes.
+            # Let each attempt own a private file, never the last good export.
+            ensure_file_path_exists(voice_file)
+            descriptor, temporary_audio = tempfile.mkstemp(
+                prefix=".azure-tts-", suffix=".mp3",
+                dir=os.path.dirname(os.path.abspath(voice_file)),
             )
+            os.close(descriptor)
+            audio_config = speechsdk.audio.AudioOutputConfig(filename=temporary_audio)
             speech_config = speechsdk.SpeechConfig(
                 subscription=speech_key, region=service_region
             )
@@ -1882,6 +1933,15 @@ def azure_tts_v2(
             # 正式生成都会按 WebUI/API 传入的 voice_rate 调整语速。
             result = speech_synthesizer.speak_ssml_async(ssml).get()
             if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                if os.path.getsize(temporary_audio) <= 0:
+                    logger.error("Azure completed without audio; preserve the previous export")
+                    return None
+                # Release SDK file-output owners before publication, including
+                # on Windows where an open handle can prevent replacement.
+                speech_synthesizer = None
+                audio_config = None
+                os.replace(temporary_audio, voice_file)
+                temporary_audio = None
                 logger.success(f"azure v2 speech synthesis succeeded: {voice_file}")
                 return sub_maker
             elif result.reason == speechsdk.ResultReason.Canceled:
@@ -1896,6 +1956,18 @@ def azure_tts_v2(
             logger.info(f"completed, output file: {voice_file}")
         except Exception as e:
             logger.error(f"failed, error: {str(e)}")
+        finally:
+            # Exceptions/cancellation can also leave the SDK output owner alive.
+            # Drop all file owners before attempting to remove its staged file.
+            speech_synthesizer = None
+            audio_config = None
+            if temporary_audio is not None:
+                try:
+                    os.remove(temporary_audio)
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    logger.warning(f"failed to remove staged Azure audio: {exc}")
     return None
 
 
@@ -2293,6 +2365,19 @@ def get_minimax_voice_catalog(
     return catalog
 
 
+def _validate_remote_tts_audio(file_path: str) -> None:
+    """Decode accepted audio fully before replacing a successful narration.
+
+    MoviePy's duration/initial frame probe does not validate later MP3 frames.
+    Reuse the bounded, self-contained FFmpeg audio validator without following
+    playlists or resubmitting an already accepted speech request.
+    """
+    try:
+        bgm.validate_audio_file(file_path, timeout_seconds=120)
+    except (bgm.BgmUploadError, bgm.BgmServiceError) as exc:
+        raise ValueError("TTS returned audio that could not be fully decoded") from exc
+
+
 def _write_validated_minimax_audio(audio_bytes: bytes, voice_file: str) -> float:
     """
     将 MiniMax 音频原子写入目标路径，并返回时长。
@@ -2312,6 +2397,30 @@ def _write_validated_minimax_audio(audio_bytes: bytes, voice_file: str) -> float
         with open(temp_path, "wb") as output:
             output.write(audio_bytes)
 
+        _validate_remote_tts_audio(temp_path)
+        # MiniMax's configured response container can differ from the caller's
+        # artifact extension (the task pipeline normally requests audio.mp3).
+        # Keep matching payloads byte-identical; transcode supported mismatches
+        # before publication so MIME/extension consumers see the promised codec.
+        source_format = (
+            "wav" if audio_bytes[:4] == b"RIFF" and audio_bytes[8:12] == b"WAVE"
+            else "flac" if audio_bytes.startswith(b"fLaC")
+            else "mp3" if audio_bytes.startswith(b"ID3") or (
+                len(audio_bytes) >= 2 and audio_bytes[0] == 0xFF
+                and audio_bytes[1] & 0xE0 == 0xE0
+            )
+            else None
+        )
+        output_format = output_suffix.lstrip(".").lower()
+        if source_format and output_format in {"mp3", "wav", "flac"} and source_format != output_format:
+            from pydub import AudioSegment
+
+            _configure_pydub_ffmpeg(AudioSegment)
+            segment = AudioSegment.from_file(io.BytesIO(audio_bytes), format=source_format)
+            exported = segment.export(temp_path, format=output_format)
+            if exported is not None:
+                exported.close()
+            _validate_remote_tts_audio(temp_path)
         audio_clip = AudioFileClip(temp_path)
         try:
             audio_duration = float(audio_clip.duration)
@@ -2355,8 +2464,8 @@ def minimax_tts(text: str, voice_id: str, voice_rate: float, voice_file: str, vo
         logger.error(f"Invalid MiniMax TTS audio setting: {str(exc)}")
         return None
     audio_format = str(settings.get("audio_format", "mp3") or "mp3").strip()
-    if audio_format not in {"mp3", "wav", "flac", "pcm"}:
-        logger.error(f"Unsupported MiniMax TTS audio format: {audio_format}")
+    if audio_format not in {"mp3", "wav", "flac"}:
+        logger.error(f"Unsupported MiniMax TTS audio format: {audio_format}; choose mp3, wav, or flac")
         return None
     payload = {
         "model": model, "text": text, "stream": False, "language_boost": "auto", "output_format": "hex",
@@ -2457,9 +2566,31 @@ def elevenlabs_tts(
         },
     }
 
+    # The live v2 endpoint rejects speeds outside 0.7–1.2; v3 supports
+    # the wider REST range. Never silently clamp a selected UI/API speed.
+    minimum_speed, maximum_speed = (0.25, 4.0) if model_id == "eleven_v3" else (0.7, 1.2)
+    speed_error = (
+        f"ElevenLabs model {model_id} speech speed must be a finite number "
+        f"from {minimum_speed} to {maximum_speed}; choose a supported speed "
+        "or use eleven_v3 for a wider range"
+    )
+    try:
+        speed = float(voice_rate) if voice_rate is not None else 1.0
+    except (TypeError, ValueError, OverflowError):
+        logger.error(speed_error)
+        return None
+    if speed != 1.0 and model_id in {"eleven_v4", "eleven_v4_turbo"}:
+        logger.error(f"ElevenLabs model {model_id} does not support speech speed; use 1.0 or a v2/v3 model")
+        return None
+    if not math.isfinite(speed) or not minimum_speed <= speed <= maximum_speed:
+        logger.error(speed_error)
+        return None
+    if speed != 1.0:
+        payload["voice_settings"]["speed"] = speed
+
     # Errors where retrying will never help (auth/access/validation failures).
     _NON_RETRYABLE_CODES = {401, 403, 422}
-    _NON_RETRYABLE_STATUSES = {"voice_disabled", "voice_access_denied", "unauthorized"}
+    _NON_RETRYABLE_STATUSES = {"voice_disabled", "voice_access_denied", "unauthorized", "invalid_voice_settings"}
 
     for i in range(3):
         response = None
@@ -2502,7 +2633,9 @@ def elevenlabs_tts(
                     logger.error(
                         f"ElevenLabs TTS failed (non-retryable) — voice_id: {voice_id}, "
                         f"status: {response.status_code}, error: {error_status or error_text}. "
-                        "Please select a different ElevenLabs voice."
+                        + (f"Check the selected model and speech speed: {error_text}"
+                           if error_status == "invalid_voice_settings"
+                           else "Please select a different ElevenLabs voice.")
                     )
                     return None
 
@@ -2530,6 +2663,7 @@ def elevenlabs_tts(
                 logger.error("ElevenLabs TTS returned no audio data")
                 return None
 
+            _validate_remote_tts_audio(temp_path)
             audio_clip = AudioFileClip(temp_path)
             try:
                 audio_duration = float(audio_clip.duration)
@@ -2640,6 +2774,7 @@ def _openai_compatible_tts(
                 temporary_audio = f.name
                 f.write(response.content)
 
+            _validate_remote_tts_audio(temporary_audio)
             audio_clip = AudioFileClip(temporary_audio)
             try:
                 audio_duration = audio_clip.duration
@@ -2914,6 +3049,7 @@ def fish_audio_tts(
                 temporary_audio = f.name
                 f.write(response.content)
 
+            _validate_remote_tts_audio(temporary_audio)
             audio_clip = AudioFileClip(temporary_audio)
             try:
                 audio_duration = audio_clip.duration
@@ -2998,7 +3134,12 @@ def _iter_voxcpm_sse_events(response):
 
     event_data = []
     event_bytes = 0
+    first_line = True
     for line in lines():
+        if first_line:
+            # SSE UTF-8 decoding ignores one BOM at the start of the stream.
+            line = line.removeprefix("\ufeff")
+            first_line = False
         if not line:
             if event_data:
                 yield parse_event(event_data)
@@ -3396,18 +3537,20 @@ def _match_script_line(script_lines: list[str], current_text: str, sub_index: in
         return ""
 
     target_line = script_lines[sub_index]
-    if current_text == target_line:
+    comparison_target = unicodedata.normalize("NFC", target_line)
+    current_text = unicodedata.normalize("NFC", current_text)
+    if current_text == comparison_target:
         return target_line.strip()
 
     current_text_normalized = re.sub(r"[_\W]+", "", current_text)
-    target_line_normalized = re.sub(r"[_\W]+", "", target_line)
+    target_line_normalized = re.sub(r"[_\W]+", "", comparison_target)
     if current_text_normalized == target_line_normalized:
         return target_line.strip()
 
     # 最后一层阿拉伯语容错：edge-tts 返回的字母形态、变音符号或 Tatweel
     # 可能和脚本不同。只在常规匹配失败后归一化比较，非阿拉伯语文本不会受影响。
     current_ar = re.sub(r"[_\W]+", "", _normalize_arabic(current_text))
-    target_ar = re.sub(r"[_\W]+", "", _normalize_arabic(target_line))
+    target_ar = re.sub(r"[_\W]+", "", _normalize_arabic(comparison_target))
     if current_ar and current_ar == target_ar:
         return target_line.strip()
 
@@ -3421,7 +3564,7 @@ def _write_subtitle_items(sub_items: list[str], subtitle_file: str) -> bool:
         with staged_subtitle_file(subtitle_file) as staged:
             with open(staged, "w", encoding="utf-8") as file:
                 file.write("\n".join(sub_items) + "\n")
-            sbs = subtitles.file_to_subtitles(staged, encoding="utf-8")
+            sbs = moviepy_subtitles(staged)
             if not sbs:
                 raise ValueError("subtitle output contains no cues")
             duration = max(tb for ((ta, tb), txt) in sbs)

@@ -73,6 +73,146 @@ JEWELRY_IMAGE_TEMPLATE = (
     "photography, ultra detailed"
 )
 
+
+# Long-form production profiles consumed by the DIY Factory planner/renderer.
+#
+# Each profile captures the parts of the n8n "DIY Longform Factory" that belong
+# to a preset rather than a single run: the visual bible / art style the scene
+# agents must honour, planning targets (chapters, scenes, pacing) the planner
+# aims for, and the render + QA gates the native MPT renderer applies. The
+# renderer is moneyprinterturbo's own video_project pipeline; OpenMontage is an
+# optional downstream multiplier for shorts/derivatives.
+
+DIY_PRODUCTION = {
+    "art_style": {
+        "style": "clean instructional illustration",
+        "visual_style": (
+            "clear line art, soft flat colors, high readability, subtle shadows, "
+            "diagram-friendly"
+        ),
+        "character_design": (
+            "simple friendly adult figure with consistent clothing and "
+            "proportions, hands clearly visible when using tools"
+        ),
+        "background_style": (
+            "uncluttered workshop or home setting with soft neutral walls, "
+            "clear surfaces"
+        ),
+        "color_palette": "muted blues, warm wood tones, soft greens, high-contrast accents",
+        "mood": "calm, confident, helpful, professional yet approachable",
+    },
+    "planning": {
+        "target_chapters": 5,
+        "min_scenes": 5,
+        "max_scenes": 40,
+        "scenes_per_chapter": 6,
+        "target_minutes": 8,
+        "title_cards": True,
+    },
+    "render": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "ken_burns": True,
+        "transition": "crossfade",
+        "narration_volume": 1.0,
+        "bgm_volume": 0.12,
+    },
+    "qa": {
+        "require_narration": True,
+        "require_image_prompt": True,
+        "reject_placeholder_text": True,
+        "vision_qa": True,
+    },
+    "openmontage": {
+        "enabled": True,
+        "pipeline": "animated-explainer",
+        "multiplier_pipeline": "clip-factory",
+        "shorts": True,
+    },
+}
+
+TYPE_BEAT_PRODUCTION = {
+    "art_style": {
+        "style": "dark noir cinematic stills",
+        "visual_style": "low-key lighting, neon accents, 35mm grain, high contrast",
+        "character_design": "no faces; silhouettes from behind or far away only",
+        "background_style": "rain-slick streets, neon signage, smoke, empty lots",
+        "color_palette": "teal and crimson neon, deep shadows, near-black blacks",
+        "mood": "moody, atmospheric, loopable",
+    },
+    "planning": {
+        "target_chapters": 1,
+        "min_scenes": 5,
+        "max_scenes": 60,
+        "scenes_per_chapter": 20,
+        "target_minutes": 0,
+        "title_cards": True,
+    },
+    "render": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "ken_burns": True,
+        "transition": "cut",
+        "narration_volume": 0.0,
+        "bgm_volume": 1.0,
+    },
+    "qa": {
+        "require_narration": False,
+        "require_image_prompt": True,
+        "reject_placeholder_text": True,
+        "vision_qa": False,
+    },
+    "openmontage": {
+        "enabled": True,
+        "pipeline": "cinematic",
+        "multiplier_pipeline": "clip-factory",
+        "shorts": True,
+    },
+}
+
+JEWELRY_PRODUCTION = {
+    "art_style": {
+        "style": "luxury macro product film",
+        "visual_style": "extreme macro, sparkling facets, soft studio reflections",
+        "character_design": "hands and neckline only; no identifiable faces",
+        "background_style": "black velvet, warm rim light, shallow depth of field",
+        "color_palette": "gold, champagne, deep black, cool white highlights",
+        "mood": "desirable, elegant, expensive",
+    },
+    "planning": {
+        "target_chapters": 3,
+        "min_scenes": 4,
+        "max_scenes": 20,
+        "scenes_per_chapter": 5,
+        "target_minutes": 0,
+        "title_cards": True,
+    },
+    "render": {
+        "width": 1080,
+        "height": 1920,
+        "fps": 30,
+        "ken_burns": True,
+        "transition": "crossfade",
+        "narration_volume": 1.0,
+        "bgm_volume": 0.2,
+    },
+    "qa": {
+        "require_narration": True,
+        "require_image_prompt": True,
+        "reject_placeholder_text": True,
+        "vision_qa": True,
+    },
+    "openmontage": {
+        "enabled": True,
+        "pipeline": "cinematic",
+        "multiplier_pipeline": "clip-factory",
+        "shorts": True,
+    },
+}
+
+
 VERTICALS: dict[str, dict] = {
     "none": {
         "label": "No Preset",
@@ -86,6 +226,7 @@ VERTICALS: dict[str, dict] = {
         "bgm_type": "",
         "clip_duration": 0,
         "paragraph_number": 0,
+        "production": None,
     },
     "diy": {
         "label": "DIY Tutorial",
@@ -102,6 +243,7 @@ VERTICALS: dict[str, dict] = {
         "bgm_type": "random",
         "clip_duration": 5,
         "paragraph_number": 5,
+        "production": DIY_PRODUCTION,
     },
     "type_beat": {
         "label": "Type Beat Music Video",
@@ -119,6 +261,7 @@ VERTICALS: dict[str, dict] = {
         "bgm_type": "custom",
         "clip_duration": 5,
         "paragraph_number": 1,
+        "production": TYPE_BEAT_PRODUCTION,
     },
     "jewelry": {
         "label": "Jewelry Promo",
@@ -135,6 +278,7 @@ VERTICALS: dict[str, dict] = {
         "bgm_type": "random",
         "clip_duration": 4,
         "paragraph_number": 4,
+        "production": JEWELRY_PRODUCTION,
     },
 }
 
