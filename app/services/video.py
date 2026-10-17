@@ -2062,8 +2062,11 @@ def generate_video(
         voice_source_clip = clip_stack.enter_context(AudioFileClip(audio_path))
         video_clip = source_video_clip
         audio_volume = params.bgm_volume if is_beat_length_mode(params) else params.voice_volume
+        # voice_volume/bgm_volume are nullable in the schema; None means "keep
+        # the source level", so skip the volume effect instead of feeding None
+        # into MultiplyVolume (moviepy raises TypeError on None * float).
         audio_clip = voice_source_clip.with_effects(
-            [afx.MultiplyVolume(audio_volume)]
+            [afx.MultiplyVolume(audio_volume)] if audio_volume is not None else []
         )
 
         def make_textclip(text):
@@ -2114,7 +2117,11 @@ def generate_video(
         bgm_mix_succeeded = True
         if bgm_file:
             try:
-                bgm_effects = [afx.MultiplyVolume(params.bgm_volume)]
+                bgm_effects = (
+                    [afx.MultiplyVolume(params.bgm_volume)]
+                    if params.bgm_volume is not None
+                    else []
+                )
                 # 服务内解析的随机/自定义音乐可能比成片短，需要循环铺满；任务层
                 # 通过 override 传入的文件表示提供商已经完成时长适配。这里依据
                 # 文件来源决定是否循环，避免今后每增加一个提供商都修改名称白名单。
