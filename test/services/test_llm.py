@@ -210,7 +210,9 @@ class TestScriptPromptOptions(unittest.TestCase):
         with patch.object(
             llm, "_generate_response", side_effect=fake_generate_response
         ):
-            result = llm.generate_script(video_subject="savings tips", language="en-US")
+            result = llm.generate_script(
+                video_subject="savings tips", language="en-US", paragraph_number=2
+            )
 
         # Each bracket / paren group should be gone, but the surrounding words
         # must survive.

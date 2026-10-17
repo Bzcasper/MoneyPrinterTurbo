@@ -793,13 +793,14 @@ def generate_script(
         response = re.sub(r"\(.*?\)", "", response)
 
         # Split the script into paragraphs
-        paragraphs = response.split("\n\n")
+        raw_paragraphs = re.split(r"\n\s*\n+", response)
+        paragraphs = [p.strip() for p in raw_paragraphs if p.strip()]
 
         # Select the specified number of paragraphs
-        # selected_paragraphs = paragraphs[:paragraph_number]
+        selected_paragraphs = paragraphs[:paragraph_number]
 
         # Join the selected paragraphs into a single string
-        return "\n\n".join(paragraphs)
+        return "\n\n".join(selected_paragraphs)
 
     for i in range(_max_retries):
         try:
