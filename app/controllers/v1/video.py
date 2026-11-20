@@ -222,7 +222,11 @@ def autopilot_claim_private_upload_internal(request: Request, body: dict):
 def music_factory_next_internal(request: Request):
     _autopilot_trusted_lan(request)
     from scripts.music_factory_catalog import next_candidate
+    from scripts.music_factory_provider_router import factory_provider_readiness
 
+    readiness = factory_provider_readiness()
+    if not readiness["ready"]:
+        return utils.get_response(200, {"has_work": False, **readiness})
     return utils.get_response(200, next_candidate())
 
 

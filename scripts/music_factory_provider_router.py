@@ -54,6 +54,39 @@ def verified_providers(*, now: float | None = None, health_file: Path = HEALTH) 
     return tuple(active)
 
 
+def factory_provider_readiness(*, now: float | None = None, health_file: Path = HEALTH) -> dict:
+    """Fail closed until a *real decoded-motion* and free-route receipt is current.
+
+    No paid-provider fallback is inferred from the presence of a webhook or login.
+    This is a scheduling gate, not a provider authorization bypass.
+    """
+    now = time.time() if now is None else now
+    active = verified_providers(now=now, health_file=health_file)
+    try:
+        evidence = json.loads(health_file.read_text())
+    except (OSError, ValueError, TypeError):
+        evidence = {}
+    firefly = evidence.get("firefly", {}) if isinstance(evidence, dict) else {}
+    firefly_ready = (
+        isinstance(firefly, dict)
+        and firefly.get("provider") == "firefly"
+        and firefly.get("motion_verified") is True
+        and firefly.get("zero_credits_verified") is True
+        and firefly.get("approved_free_route") is True
+        and float(firefly.get("verified_at") or 0) <= now
+        and 0 <= now - float(firefly.get("verified_at") or 0) < 86400
+    )
+    providers = list(active)
+    if firefly_ready:
+        providers.append("firefly")
+    return {
+        "ready": bool(providers),
+        "status": "READY" if providers else "HOLD_MOTION_PROVIDER_UNVERIFIED",
+        "verified_providers": providers,
+        "publishing_approved": False,
+    }
+
+
 def scene_provider_order(slot: int, *, now: float | None = None, health_file: Path = HEALTH) -> tuple[str, ...]:
     """Spread verified routes across the edit while always retaining Firefly."""
     active = verified_providers(now=now, health_file=health_file)
