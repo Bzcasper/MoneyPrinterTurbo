@@ -29,7 +29,12 @@ APPROVED_IMAGE_ROOTS = (
     Path("/home/bobby/Videos/scene-director/automatic"),
     Path("/home/bobby/projects/ComfyUI/input"),
 )
-CHECKPOINT = "wan2.2_ti2v_5B_fp16.safetensors"
+# The 8 GB ROG requires the independently SHA256-verified Kijai FP8 checkpoint.
+# Its production use remains blocked until native motion QA proves this host.
+CHECKPOINT = "Wan2_2-TI2V-5B_fp8_e4m3fn_scaled_KJ.safetensors"
+CHECKPOINT_SHA256 = "a83f54a2450d5471e5721e59ab556afa2d8793e30280713e3796b254c5286b48"
+MANIFEST = STAGING / "verified-model-manifest-fp8-bundle.json"
+MODEL_MOUNT = Path("/home/bobby/.local/share/media-studio/wan-models")
 MIN_W = 1280
 MIN_H = 704
 SENTINEL = "wan22_local"
@@ -78,6 +83,33 @@ def production_ready(*, health_file: Path = HEALTH, now: float | None = None) ->
         and 4.7<=duration<=5.3
         and bool(re.fullmatch(r"[a-f0-9]{64}",str(e.get("sha256") or "")))
     )
+
+
+def verified_local_model_bundle() -> bool:
+    """Require the correctly identified, checksum-verified local FP8 bundle."""
+    try:
+        manifest=json.loads(MANIFEST.read_text())
+        if not (manifest.get("sha256_verified") is True
+                and manifest.get("model")=="Wan2.2 TI2V-5B FP8 Kijai"):
+            return False
+        files=manifest["files"]
+        if len(files)!=3:return False
+        for file in files:
+            name=file.get("rel")
+            digest=file.get("sha256")
+            size=file.get("size")
+            if not isinstance(name,str) or not isinstance(size,int):
+                return False
+            if len(str(digest))!=64 or size<=0:return False
+            target=(MODEL_MOUNT / name).resolve()
+            if not target.is_relative_to(MODEL_MOUNT.resolve()):
+                return False
+            if not target.is_file() or target.stat().st_size!=size:return False
+            if name.endswith(CHECKPOINT) and digest!=CHECKPOINT_SHA256:
+                return False
+        return any(f.get("rel")=="diffusion_models/"+CHECKPOINT for f in files)
+    except (OSError,ValueError,TypeError,KeyError,RuntimeError):
+        return False
 
 
 def _checked_source(source: str | Path) -> Path:
@@ -138,9 +170,19 @@ def build_plan(prompt: str, slot: int, image_input_name: str,
         raise WanUnavailable("Motion sequence must have sufficient native frames")
     if not 6<=steps<=40:
         raise WanUnavailable("Sampler must use 6-40 steps")
-    graph=json.loads((STAGING/"api-prompt.json").read_text())
+    graph=json.loads((STAGING/"api-prompt-fp8.json").read_text())
     assert graph["38"]["inputs"]["device"]=="cpu", "8GB GPU must use CPU text encoder"
     graph["37"]["inputs"]["unet_name"]=CHECKPOINT
+    # Tiled video VAE decoding avoids the full-frame peak memory allocation.
+    # This matches the live ComfyUI VAEDecodeTiled node schema.
+    graph["8"]={
+        "class_type":"VAEDecodeTiled",
+        "inputs":{
+            "samples":["3",0],"vae":["39",0],
+            "tile_size":128,"overlap":64,
+            "temporal_size":16,"temporal_overlap":4
+        }
+    }
     graph["56"]["inputs"]["image"]=image_input_name
     graph["55"]["inputs"].update(width=width,height=height,length=length,batch_size=1)
     graph["6"]["inputs"]["text"]=text
@@ -199,6 +241,8 @@ def run_approved_scene(prompt: str, slot: int, *, image_path: str | Path,
                        timeout: int = 1800) -> dict:
     """Generate one approved source-based motion clip, never publish."""
     if not production_ready():raise WanUnavailable("Production Wan motion provider is not verified")
+    if not verified_local_model_bundle():
+        raise WanUnavailable("Local FP8 model bundle missing or unverified")
     if not 240<=timeout<=2400:raise WanUnavailable("Timeout outside 240-2400 seconds")
     lock_path=STAGING/"production-wan-job.lock"
     lock_path.parent.mkdir(parents=True,exist_ok=True)
@@ -231,7 +275,9 @@ def run_approved_scene(prompt: str, slot: int, *, image_path: str | Path,
         if partial.exists():raise WanUnavailable("Partial destination collision")
         try:
             cmd=["ffmpeg","-nostdin","-hide_banner","-loglevel","error","-i",str(native),
-                 "-t","5","-an","-vf","pad=1280:720:0:8:color=black,fps=24",
+                 "-t","5","-an","-vf",
+                 "scale=1280:720:force_original_aspect_ratio=decrease,"
+                 "pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=24",
                  "-c:v","libx264","-preset","veryfast","-crf","19",
                  "-pix_fmt","yuv420p","-movflags","+faststart","-y",str(partial)]
             subprocess.run(cmd,check=True,timeout=180,capture_output=True,text=True)

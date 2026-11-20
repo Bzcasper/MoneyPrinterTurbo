@@ -9,8 +9,11 @@ queuing a ComfyUI prompt makes the local provider production-ready.
 1. Scene metadata supplies a local still with anchor_qa_status=APPROVED (or image_qa_status=APPROVED).
 2. The provider checks that image is within approved local roots, verifies its
    image format, and creates a distinct deterministic copy in ComfyUI/input.
-3. It uses the 12-node native ComfyUI Wan 2.2 TI2V graph, with UMT5 text
-   encoder assigned to CPU on this 8 GB GPU and WanVAE offloaded to CPU.
+3. It uses the verified Wan2.2 TI2V 5B FP8 e4m3fn scaled checkpoint
+   (Kijai, 5.28GB), its checksum-verified manifest, and the native ComfyUI
+   Wan graph. The UMT5 text encoder is assigned to CPU on this 8 GB GPU.
+   Full-resolution VAE decode uses the built-in VAEDecodeTiled node with
+   128px tiles, 64px overlap, 16-frame temporal chunks and 4-frame overlap.
 4. Native generation is required to produce at least 1280x704, roughly five
    seconds and actual decoded-frame motion.
 5. Padding to 1280x720 and transcoding to H.264 occurs **after** native-motion

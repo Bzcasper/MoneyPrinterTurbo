@@ -93,7 +93,7 @@ class WanLocalProviderTests(unittest.TestCase):
                 '58': {'class_type': 'SaveVideo', 'inputs': {
                     'filename_prefix': 'fixture', 'format': 'mp4', 'codec': 'h264'}},
             }
-            (stage / 'api-prompt.json').write_text(json.dumps(fixture))
+            (stage / 'api-prompt-fp8.json').write_text(json.dumps(fixture))
             with patch.object(wan, 'STAGING', stage):
                 name = 'wan22-approved-' + 'a' * 24 + '.png'
                 text = 'Slow dolly through a rain-soaked city at blue hour.'
@@ -102,6 +102,10 @@ class WanLocalProviderTests(unittest.TestCase):
                 self.assertEqual(graph['55']['inputs']['height'], 704)
                 self.assertEqual(graph['55']['inputs']['length'], 61)
                 self.assertEqual(graph['38']['inputs']['device'], 'cpu')
+                self.assertEqual(graph['37']['inputs']['unet_name'], wan.CHECKPOINT)
+                self.assertEqual(graph['8']['class_type'], 'VAEDecodeTiled')
+                self.assertEqual(graph['8']['inputs']['tile_size'], 128)
+                self.assertEqual(graph['8']['inputs']['temporal_size'], 16)
                 with self.assertRaises(wan.WanUnavailable):
                     wan.build_plan(text, 1, name, width=384, height=224)
                 with self.assertRaises(wan.WanUnavailable):
@@ -123,6 +127,38 @@ class WanLocalProviderTests(unittest.TestCase):
                 self.assertEqual(original_hash, hashlib.sha256(image.read_bytes()).hexdigest())
                 with self.assertRaises(wan.WanUnavailable):
                     wan.prepare_input(root / 'missing.png')
+
+    def test_fp8_bundle_manifest_gate_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            files=[
+                ('diffusion_models/'+wan.CHECKPOINT,37,wan.CHECKPOINT_SHA256),
+                ('vae/wan2.2_vae.safetensors',21,'e'*64),
+                ('text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors',27,'f'*64),
+            ]
+            for name,length,digest in files:
+                target=root/name
+                target.parent.mkdir(parents=True,exist_ok=True)
+                target.write_bytes(b'x'*length)
+            manifest=root/'manifest.json'
+            data={'model':'Wan2.2 TI2V-5B FP8 Kijai',
+                  'sha256_verified':True,
+                  'files':[{'rel':name,'size':length,'sha256':digest}
+                           for name,length,digest in files]}
+            with patch.object(wan,'MODEL_MOUNT',root),patch.object(wan,'MANIFEST',manifest):
+                manifest.write_text(json.dumps(data))
+                self.assertTrue(wan.verified_local_model_bundle())
+                data['files'][0]['sha256']='bad'
+                manifest.write_text(json.dumps(data))
+                self.assertFalse(wan.verified_local_model_bundle())
+                data['files'][0]['sha256']=wan.CHECKPOINT_SHA256
+                data['sha256_verified']=False
+                manifest.write_text(json.dumps(data))
+                self.assertFalse(wan.verified_local_model_bundle())
+                data['sha256_verified']=True
+                data['files'][2]['size']+=1
+                manifest.write_text(json.dumps(data))
+                self.assertFalse(wan.verified_local_model_bundle())
 
     def test_local_receipt_rejects_paths_outside_approved_directory(self):
         with tempfile.TemporaryDirectory() as d:
