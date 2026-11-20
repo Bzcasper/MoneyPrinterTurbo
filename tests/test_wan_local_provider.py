@@ -70,6 +70,13 @@ class WanLocalProviderTests(unittest.TestCase):
             }}))
             self.assertEqual(router.scene_provider_order(1, health_file=health), ('metaai',))
 
+    def test_production_benchmark_uses_verified_ssd_canary(self):
+        from scripts import music_factory_wan22_production_benchmark as bench
+        self.assertEqual(
+            bench.SMOKE,
+            wan.STAGING/'ssd-smoke-native-motion-canary-evidence.json')
+        self.assertNotEqual(bench.SMOKE.name,'fp8-smoke-native-motion-canary-evidence.json')
+
     def test_production_benchmark_never_submits_without_smoke_qa(self):
         from scripts import music_factory_wan22_production_benchmark as bench
         with tempfile.TemporaryDirectory() as d:

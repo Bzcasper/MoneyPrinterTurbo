@@ -15,7 +15,7 @@ import uuid
 
 from scripts import music_factory_wan22_local as wan
 
-SMOKE=wan.STAGING / 'fp8-smoke-native-motion-canary-evidence.json'
+SMOKE=wan.STAGING / 'ssd-smoke-native-motion-canary-evidence.json'
 BENCHMARK=wan.STAGING / 'fp8-production-benchmark'
 SOURCE=wan.INPUTS / 'media_studio_wan_canary_20261120.png'
 PROMPT=(
