@@ -69,7 +69,7 @@ def _autopilot_trusted_lan(request: Request) -> None:
     This route is deliberately not exposed through Cloudflare public domains.
     """
     addr = str(request.client.host) if request.client else ""
-    if addr not in {"127.0.0.1", "::1", "10.0.0.242"}:
+    if addr not in {"127.0.0.1", "::1", "10.0.0.242", "10.0.0.243"}:
         raise HttpException(
             task_id=base.get_task_id(request),
             status_code=403,
