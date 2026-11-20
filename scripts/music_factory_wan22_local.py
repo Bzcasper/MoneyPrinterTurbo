@@ -84,6 +84,7 @@ def production_ready(*, health_file: Path = HEALTH, now: float | None = None) ->
         and width>=MIN_W and height>=MIN_H
         and 4.7<=duration<=5.3
         and bool(re.fullmatch(r"[a-f0-9]{64}",str(e.get("sha256") or "")))
+        and verified_local_model_bundle()
     )
 
 

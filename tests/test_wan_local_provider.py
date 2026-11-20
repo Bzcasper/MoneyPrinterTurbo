@@ -44,7 +44,8 @@ class WanLocalProviderTests(unittest.TestCase):
             base = valid_evidence()
             def check(record):
                 health.write_text(json.dumps({'wan22_local': record}))
-                return router.factory_provider_readiness(health_file=health)['ready']
+                with patch.object(wan,'verified_local_model_bundle',return_value=True):
+                    return router.factory_provider_readiness(health_file=health)['ready']
             self.assertTrue(check(base))
             for key, value in (
                 ('native_width', 384), ('native_height', 224),
@@ -149,6 +150,14 @@ class WanLocalProviderTests(unittest.TestCase):
                 self.assertEqual(original_hash, hashlib.sha256(image.read_bytes()).hexdigest())
                 with self.assertRaises(wan.WanUnavailable):
                     wan.prepare_input(root / 'missing.png')
+
+    def test_production_gate_requires_actual_verified_local_bundle(self):
+        with tempfile.TemporaryDirectory() as folder:
+            health=Path(folder)/'health.json'
+            health.write_text(json.dumps({'wan22_local':valid_evidence()}))
+            with patch.object(wan,'verified_local_model_bundle',return_value=False):
+                self.assertFalse(wan.production_ready(health_file=health))
+                self.assertNotIn('wan22_local',router.factory_provider_readiness(health_file=health)['verified_providers'])
 
     def test_model_loader_uses_only_verified_local_rog_ssd_cache(self):
         self.assertEqual(
