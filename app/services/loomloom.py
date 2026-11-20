@@ -20,7 +20,6 @@ from urllib.parse import quote, urlsplit
 import requests
 from loguru import logger
 
-from app.services import generation_progress
 from app.utils.request_logging import trace_http_call
 
 

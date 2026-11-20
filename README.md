@@ -253,8 +253,8 @@
 ### 脚本与模型服务
 
 - [x] 支持 AI 自动生成或改写 **多语言视频脚本**，也可以直接使用自定义脚本
-- [x] 支持 [Kimi / Moonshot AI](https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo)、[OpenAI](https://platform.openai.com/api-keys)、[Anthropic Claude](https://platform.claude.com/settings/keys)、[Google Gemini](https://aistudio.google.com/app/apikey)、[DeepSeek](https://platform.deepseek.com/api_keys)、[阿里云通义千问](https://dashscope.console.aliyun.com/apiKey)、[Microsoft Azure OpenAI](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI)、[火山引擎方舟](https://www.volcengine.com/activity/ai618?utm_campaign=hw&utm_content=hw&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=MoneyPrinterTurbo)、[xAI Grok](https://console.x.ai/)、[MiniMax](https://platform.minimaxi.com/)、[Muse Spark](https://dev.meta.ai/docs/authentication)、[讯飞星火](https://maas.xfyun.cn/) 和 [小米 MiMo](https://platform.xiaomimimo.com/docs/zh-CN/quick-start/first-api-call) 等主流模型服务
-- [x] 兼容 [APIXO AI](https://apixo.ai/dashboard/api-keys)、[APINEBULA](https://apinebula.ai/ref/luDuqJIb)、[Jalapeno Cloud](https://www.jalapeno-cloud.ai/MoneyPrinterTurbo)、[无限星河 AI（Infistar）](https://infistar.cc/keys)、[Fluxion AI](https://fluxionai.space/register?source=github&campaign=moneyprinterturbo&promo=MONEYPRINTERTURBO)、[Cheaper Inference](https://cheaperinference.com/signup)、[Requesty](https://app.requesty.ai/api-keys)、[FutureInfra](https://futureinfra.ai/console/?screen=ai-router)、[Y-API](https://y-api.bestvirtualgoods.com/app/keys)、[Opper](https://platform.opper.ai)、[onomeo](https://onomeo.com/dashboard)、[EmpirioLabs AI](https://platform.empiriolabs.ai/dashboard/api-keys)、[Runcrate](https://www.runcrate.ai/dashboard/api-keys?utm_source=MoneyPrinterTurbo&utm_medium=directory&utm_campaign=gpu_pricing)、[CloudGPU](https://cloudgpu.app)、[cheapaimodel](https://console.cheapaimodel.ai/keys)、[胜算云](https://www.shengsuanyun.com/?from=CH_XUQ4OTSK)、[APIMart](https://go.apimart.ai/gh-moneyprinterturbo)、[Cloudflare AI Gateway](https://dash.cloudflare.com/)、[魔搭 ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro)、[AIHubMix](https://aihubmix.com/)、[AIML API](https://aimlapi.com/app/keys)、[EvoLink](https://evolink.ai/dashboard/keys)、[OpenRouter](https://openrouter.ai/settings/keys)、[API Route](https://www.api-route.com/)、[Kimi Code](https://www.kimi.com/code?aff=moneyprinterturbo)、[OpenAI - Codex](docs/codex-provider.md)、[ChatGPT Native OAuth](docs/chatgpt-provider.md)、[Ollama](https://ollama.com/)、[Claude Code 订阅](https://code.claude.com/docs)、[OneAPI](https://github.com/songquanpeng/one-api)、[LiteLLM](https://docs.litellm.ai/docs/providers)、[Groq](https://console.groq.com/keys) 和 [Pollinations AI](https://enter.pollinations.ai/) 等统一网关、聚合平台和本地运行环境
+- [x] 支持 [Kimi / Moonshot AI](https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo)、[OpenAI](https://platform.openai.com/api-keys)、[Anthropic Claude](https://platform.claude.com/settings/keys)、[Google Gemini](https://aistudio.google.com/app/apikey)、[DeepSeek](https://platform.deepseek.com/api_keys)、[阿里云通义千问](https://dashscope.console.aliyun.com/apiKey)、[Microsoft Azure OpenAI](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI)、[火山引擎方舟](https://www.volcengine.com/activity/ai618?utm_campaign=hw&utm_content=hw&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=MoneyPrinterTurbo)、[xAI Grok](https://console.x.ai/)、[MiniMax](https://platform.minimaxi.com/) 和 [小米 MiMo](https://platform.xiaomimimo.com/docs/zh-CN/quick-start/first-api-call) 等主流模型服务
+- [x] 兼容 [胜算云](https://www.shengsuanyun.com/?from=CH_XUQ4OTSK)、[APIMart](https://go.apimart.ai/gh-moneyprinterturbo)、[Cloudflare AI Gateway](https://dash.cloudflare.com/)、[魔搭 ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro)、[AIHubMix](https://aihubmix.com/)、[AIML API](https://aimlapi.com/app/keys)、[EvoLink](https://evolink.ai/dashboard/keys)、[OpenRouter](https://openrouter.ai/settings/keys)、[API Route](https://www.api-route.com/)、[Ollama](https://ollama.com/)、[Claude Code 订阅](https://code.claude.com/docs)、[OneAPI](https://github.com/songquanpeng/one-api)、[LiteLLM](https://docs.litellm.ai/docs/providers)、[Groq](https://console.groq.com/keys) 和 [Pollinations AI](https://enter.pollinations.ai/) 等统一网关、聚合平台和本地运行环境
 
 ### 视频与图片素材
 
@@ -419,11 +419,11 @@ WebUI 会自动打开浏览器。指定端口且不自动打开浏览器时，�
 首次启动会自动创建 `config.toml`。使用在线模型、素材或语音服务前，请在 WebUI
 基础设置中填写相应的 API Key。安装版默认将配置和生成文件保存在：
 
-| 系统    | 数据目录                                                                  |
-| ------- | ------------------------------------------------------------------------- |
-| macOS   | `~/Library/Application Support/MoneyPrinterTurbo`                         |
-| Windows | `%LOCALAPPDATA%\MoneyPrinterTurbo`                                        |
-| Linux   | `~/.local/share/MoneyPrinterTurbo`，或 `$XDG_DATA_HOME/MoneyPrinterTurbo` |
+| 系统 | 数据目录 |
+| --- | --- |
+| macOS | `~/Library/Application Support/MoneyPrinterTurbo` |
+| Windows | `%LOCALAPPDATA%\MoneyPrinterTurbo` |
+| Linux | `~/.local/share/MoneyPrinterTurbo`，或 `$XDG_DATA_HOME/MoneyPrinterTurbo` |
 
 可在启动前设置 `MPT_HOME` 更改目录，生成的视频位于其中的 `storage/tasks` 下。
 后续升级时，在已激活的虚拟环境中运行 `python -m pip install --upgrade mpt`。

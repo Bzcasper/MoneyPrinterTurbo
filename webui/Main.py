@@ -3352,14 +3352,11 @@ def _render_logging_settings():
         st.caption(tr("Diagnostic Logging Help"))
         with st.form("diagnostic_logging_form"):
             selected_level = st.selectbox(
-                tr("Log Level"),
-                LOG_LEVELS,
-                index=LOG_LEVELS.index(level),
+                tr("Log Level"), LOG_LEVELS, index=LOG_LEVELS.index(level),
                 key="diagnostic_log_level",
             )
             selected_trace = st.checkbox(
-                tr("Trace API Requests"),
-                value=log_requests,
+                tr("Trace API Requests"), value=log_requests,
                 key="diagnostic_log_requests",
                 help=tr("Trace API Requests Help"),
             )
@@ -4527,16 +4524,13 @@ def _render_settings_dialog():
 
         # 左侧面板 - 日志设置
         with left_config_panel:
-            if left_config_panel.open:
-                hide_log = st.checkbox(
-                    tr("Hide Log"),
-                    value=ui_settings.get("hide_log", False),
-                    key="hide_log_checkbox",
-                    on_change=_save_settings_change,
-                    args=("ui", "hide_log", "hide_log_checkbox", lambda value: value),
-                )
-                _set_runtime_config("ui", "hide_log", hide_log)
-                _render_logging_settings()
+            hide_log = st.checkbox(
+                tr("Hide Log"),
+                value=config.ui.get("hide_log", False),
+                key="hide_log_checkbox",
+            )
+            _set_runtime_config("ui", "hide_log", hide_log)
+            _render_logging_settings()
 
         if cache_config_panel.open:
             _render_cache_management_settings(cache_config_panel)
@@ -6446,9 +6440,7 @@ def _render_video_settings(panel, params):
                 "ui", "video_fit_mode", params.video_fit_mode.value
             )
 
-            if params.video_source in {
-                "local", "openai_image", "codex_image", "useapi_image"
-            }:
+            if params.video_source in {"local", "openai_image"}:
                 image_motion_labels = {
                     ImageMotion.static.value: tr("Static Image"),
                     ImageMotion.zoom.value: tr("Slow Zoom"),

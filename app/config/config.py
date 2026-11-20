@@ -622,7 +622,7 @@ def save_config():
         config_to_save["voxcpm"] = dict(voxcpm)
         config_to_save["ui"] = dict(ui)
         config_to_save["diagnostics"] = dict(diagnostics)
-        serialized_config = toml.dumps(config_to_save, encoder=_ConfigTomlEncoder())
+        serialized_config = toml.dumps(config_to_save)
 
         # WebUI 完整 rerun 结束时会调用保存。内容没有变化时直接返回，避免每次
         # 点击普通控件都产生一次磁盘写入和 fsync。

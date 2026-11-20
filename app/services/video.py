@@ -741,10 +741,10 @@ def _sanitize_image_file(image_path: str) -> str:
                 # Strip metadata after applying the camera's orientation.
                 # Palette transparency belongs to pixels, not removable metadata.
                 mode = "RGBA" if "A" in upright.getbands() or "transparency" in upright.info else "RGB"
-                if upright.mode in {"I;16", "I;16B", "I;16L"}:
-                    # 16-bit grayscale samples span0..65535; an RGB cast either
+                if upright.mode == "I;16":
+                    # PNG grayscale samples span0..65535; an RGB cast either
                     # clips them to white or wraps when MoviePy encodes them.
-                    with upright.convert("I").point(lambda value: value / 257 + 0.5) as byte_range:
+                    with upright.point(lambda value: value / 257 + 0.5) as byte_range:
                         cleaned_image = byte_range.convert(mode)
                 else:
                     cleaned_image = upright.convert(mode)
@@ -785,7 +785,7 @@ def _open_image_clip_with_fallback(image_path: str):
     except Exception:
         orientation = 1
         image_mode = None
-    if orientation in range(2, 9) or image_mode in {"CMYK", "LA", "1", "I;16", "I;16B", "I;16L"}:
+    if orientation in range(2, 9) or image_mode in {"CMYK", "LA", "1", "I;16"}:
         sanitized_path = _sanitize_image_file(image_path)
         return ImageClip(sanitized_path), sanitized_path
 
@@ -2385,19 +2385,24 @@ def _render_image_zoom_video_ffmpeg(
     return video_file
 
 
-def _render_image_zoom_video_moviepy(image_path: str, clip_duration: int) -> str:
+def _render_image_zoom_video_moviepy(
+    image_path: str,
+    clip_duration: float,
+    image_motion: ImageMotion = ImageMotion.zoom,
+) -> str:
     """
-    MoviePy 兜底渲染（逐帧 resize，有轻微抖动）。仅当 ffmpeg zoompan
-    路径不可用时使用，保证极端环境下仍有片段可拼接。
+    MoviePy 渲染（逐帧 resize，有轻微抖动）。静止模式（ImageMotion.static）
+    只固定播放时长；放大模式仅在 ffmpeg zoompan 路径不可用时作为兜底，
+    保证极端环境下仍有片段可拼接。
     """
     motion = ImageMotion(image_motion)
     clip, _ = _open_image_clip_with_fallback(image_path)
     clip = clip.with_duration(clip_duration).with_position("center")
     temp_path = ""
     try:
-        # 放大模式以亚像素精度逐帧放大，静止模式保留原始构图及透明背景处理。
+        # 只有放大模式改变画面尺寸，静止模式保留原始构图及透明背景处理。
         image_clip = (
-            _smooth_zoom_clip(clip, clip_duration * 0.03)
+            clip.resized(lambda t: 1 + (clip_duration * 0.03) * (t / clip.duration))
             if motion == ImageMotion.zoom
             else clip
         )
@@ -2420,7 +2425,7 @@ def _render_image_zoom_video_moviepy(image_path: str, clip_duration: int) -> str
             motion_tag = _ZOOM_CACHE_TAG if motion == ImageMotion.zoom else ""
             video_file = os.path.join(
                 os.path.dirname(image_path),
-                f"{source_identity}.{motion.value}{motion_tag}-{duration_identity}.mp4",
+                f"{source_identity}.{motion.value}-{duration_identity}.mp4",
             )
             descriptor, temp_path = tempfile.mkstemp(
                 prefix=".image-zoom-",
@@ -2443,17 +2448,24 @@ def _render_image_zoom_video_moviepy(image_path: str, clip_duration: int) -> str
 
 
 def render_image_zoom_video(
-    image_path: str, clip_duration: float = 5, *, clip_index: int | None = None
+    image_path: str,
+    clip_duration: float = 5,
+    image_motion: ImageMotion = ImageMotion.zoom,
+    *,
+    clip_index: int | None = None,
 ) -> str:
     """
-    将单张本地图片渲染为带缓慢放大效果的 mp4 片段，返回输出文件路径。
+    将单张本地图片渲染为静止或缓慢放大的 mp4 片段，返回输出文件路径。
 
     local 素材预处理和文生图素材共用这段"图片 → 片段"渲染逻辑：按
-    clip_duration 固定时长播放，并叠加每秒约 3% 的动态放大，避免静态
-    画面在成片中显得呆板。默认走 ffmpeg zoompan（子像素平滑）；失败时
-    回退 MoviePy 逐帧 resize。渲染异常由调用方按各自素材源的失败约定
-    处理。
+    clip_duration 固定时长播放。默认叠加每秒约 3% 的动态放大（或 DIY
+    步骤的 clip_index 镜头运动），走 ffmpeg zoompan（子像素平滑）；失败时
+    回退 MoviePy 逐帧 resize。image_motion 为 static 时只固定播放时长，
+    不做任何镜头运动。渲染异常由调用方按各自素材源的失败约定处理。
     """
+    motion = ImageMotion(image_motion)
+    if motion == ImageMotion.static:
+        return _render_image_zoom_video_moviepy(image_path, clip_duration, motion)
     try:
         camera_options = {"clip_index": clip_index} if clip_index is not None else {}
         return _render_image_zoom_video_ffmpeg(image_path, clip_duration, **camera_options)
@@ -2465,10 +2477,12 @@ def render_image_zoom_video(
             "ffmpeg zoompan render failed, falling back to moviepy: "
             f"image={image_path}, error={type(e).__name__}, detail={e}"
         )
-        return _render_image_zoom_video_moviepy(image_path, clip_duration)
+        return _render_image_zoom_video_moviepy(image_path, clip_duration, motion)
 
 
-def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
+def preprocess_video(
+    materials: List[MaterialInfo], clip_duration=4, image_motion: ImageMotion = ImageMotion.zoom
+):
     # WebUI 在某些二次生成场景下可能传入空素材列表，这里直接返回空结果，避免抛出 NoneType 异常。
     if not materials:
         return []

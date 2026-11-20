@@ -1390,7 +1390,8 @@ def save_video(
             delete=False,
         ) as temp_file:
             temp_path = temp_file.name
-            with download(
+            with trace_http_call(
+                "GET", requests.get,
                 video_url,
                 headers=headers,
                 proxies=config.proxy,
@@ -1921,7 +1922,11 @@ def generate_images_openai(
 
 
 def _render_openai_image_video(
-    image_path: str, clip_duration: float, *, clip_index: int | None = None
+    image_path: str,
+    clip_duration: float,
+    image_motion: ImageMotion = ImageMotion.zoom,
+    *,
+    clip_index: int | None = None,
 ) -> str:
     """
     把生成的图片渲染成 mp4 片段，复用 local 素材的"图片 → 动态片段"管线。
@@ -1930,7 +1935,9 @@ def _render_openai_image_video(
     """
     try:
         camera_options = {"clip_index": clip_index} if clip_index is not None else {}
-        return video.render_image_zoom_video(image_path, clip_duration, **camera_options)
+        return video.render_image_zoom_video(
+            image_path, clip_duration, image_motion=image_motion, **camera_options
+        )
     except Exception as e:
         logger.error(
             "failed to render generated image as a video clip: "
@@ -1948,9 +1955,6 @@ def _download_videos_openai_image_on_demand(
     max_clip_duration: int,
     material_directory: str,
     image_motion: ImageMotion = ImageMotion.zoom,
-    image_generator: Callable[..., List[MaterialInfo]] | None = None,
-    provider: str = "openai_image",
-    codex_image_context=None,
 ) -> List[str]:
     """
     按脚本片段顺序逐张生成 OpenAI 兼容文生图素材，凑够所需总时长立即停止。
@@ -3240,6 +3244,7 @@ def download_videos(
     firefly_scene_prompts: bool = False,
     firefly_clip_durations: list[float] | None = None,
     firefly_hero_shot: bool = False,
+    image_motion: ImageMotion = ImageMotion.zoom,
 ) -> List[str]:
     """
     搜索并下载覆盖配音时长所需的素材，返回本地文件路径。
@@ -3396,7 +3401,6 @@ def download_videos(
             max_clip_duration=max_clip_duration,
             material_directory=material_directory,
             image_motion=image_motion,
-            **image_options,
         )
     if source == "firefly":
         # 与 openai_image 相同的按需语义：单张生成耗时数分钟，逐段生成、
