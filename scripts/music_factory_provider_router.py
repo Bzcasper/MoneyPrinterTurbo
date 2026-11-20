@@ -18,7 +18,7 @@ class VideoProviderPolicyError(RuntimeError):
     """Explicit provider refusal. Never retry the identical rejected prompt."""
 
 
-PROVIDERS = ("firefly", "grok2api", "metaai", "qwenapi")
+PROVIDERS = ("firefly", "grok2api", "metaai", "qwenapi", "wan22_local")
 HEALTH = Path("/home/bobby/.cache/scene-continuity/video-provider-health.json")
 LAN = "http://10.0.0.243:5678/webhook"
 ENDPOINTS = {
@@ -45,6 +45,10 @@ def verified_providers(*, now: float | None = None, health_file: Path = HEALTH) 
         evidence = report.get(name, {})
         if not isinstance(evidence, dict):
             continue
+        if name == "wan22_local":
+            from scripts.music_factory_wan22_local import production_ready
+            if not production_ready(health_file=health_file, now=now):
+                continue
         if (evidence.get("motion_verified") is True
             and evidence.get("provider") == name
             and float(evidence.get("verified_at") or 0) <= now
@@ -90,11 +94,16 @@ def factory_provider_readiness(*, now: float | None = None, health_file: Path = 
 def scene_provider_order(slot: int, *, now: float | None = None, health_file: Path = HEALTH) -> tuple[str, ...]:
     """Spread verified routes across the edit while always retaining Firefly."""
     active = verified_providers(now=now, health_file=health_file)
+    # Do not retry Firefly when billing/fair-use entitlement is unverified.
+    # The /factory/next hold also enforces this, but manual worker invocations
+    # must independently fail closed rather than attempting a paid provider.
+    firefly_ready = "firefly" in factory_provider_readiness(
+        now=now, health_file=health_file
+    )["verified_providers"]
     if not active:
-        return ("firefly",)
-    # Deterministic placement across different acts; never change a slot on retry.
+        return ("firefly",) if firefly_ready else ()
     picked = active[(slot - 1) % len(active)]
-    return (picked, "firefly")
+    return (picked, "firefly") if firefly_ready else (picked,)
 
 
 def provider_request(provider: str, prompt: str, slot: int) -> dict:
@@ -113,7 +122,15 @@ def provider_request(provider: str, prompt: str, slot: int) -> dict:
     return {"slot": slot, "prompt": prompt, "allow_credit_usage": False}
 
 
-def request_video(provider: str, prompt: str, slot: int, timeout: int = 360) -> dict:
+def request_video(
+    provider: str, prompt: str, slot: int,
+    timeout: int = 360, *, image_file: str | None = None
+) -> dict:
+    if provider == "wan22_local":
+        from scripts.music_factory_wan22_local import run_approved_scene
+        return run_approved_scene(
+            prompt, slot, image_path=image_file, timeout=timeout
+        )
     payload = json.dumps(provider_request(provider, prompt, slot)).encode()
     req = urllib.request.Request(
         ENDPOINTS[provider], data=payload, method="POST",
@@ -145,6 +162,23 @@ def validated_path(provider: str, receipt: dict, *, slot: int) -> str:
     """Accept only real durable n8n MP4 locations; reject misleading success."""
     if provider not in PROVIDERS or receipt.get("success") is not True:
         raise ValueError("Video generation did not report success")
+    if provider == "wan22_local":
+        from scripts.music_factory_wan22_local import DEST
+        remote = str(receipt.get("host_path") or "")
+        path = Path(remote).expanduser().resolve(strict=True)
+        if not path.is_relative_to(DEST.resolve()):
+            raise ValueError("Local Wan video outside approved output directory")
+        if not path.name.endswith(".mp4") or not path.is_file():
+            raise ValueError("Local Wan receipt is not a video file")
+        if receipt.get("no_external_api_credits") is not True or (
+            receipt.get("native_motion_verified") is not True
+        ):
+            raise ValueError("Local Wan origin/motion receipt missing")
+        import hashlib
+        checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+        if checksum != receipt.get("sha256"):
+            raise ValueError("Local Wan video SHA256 mismatch")
+        return str(path)
     remote = str(receipt.get("host_path") or "")
     if not STORED.fullmatch(remote) or ".." in remote or "//" in remote:
         raise ValueError("Video provider returned an unsafe or missing stored MP4")

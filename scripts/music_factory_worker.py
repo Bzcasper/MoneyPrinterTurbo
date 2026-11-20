@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -345,16 +346,38 @@ def video_scene(
         }
     prompt = generated_prompt(scene, treatment, slot, kind)
     errors = []
-    for provider in scene_provider_order(slot):
+    eligible_providers = scene_provider_order(slot)
+    if not eligible_providers:
+        raise VideoProviderPolicyError("No verified zero-credit native-motion provider")
+    for provider in eligible_providers:
         for attempt in range(2 if provider == "firefly" else 1):
             partial = target.with_suffix(".partial.mp4")
             try:
-                result = request_video(provider, prompt, slot, timeout=380)
-                remote = validated_path(provider, result, slot=slot)
-                call(
-                    ["scp", "-q", "-o", "BatchMode=yes", "bobby-nuc:" + remote, partial],
-                    timeout=100,
+                # Wan requires an approved image-first anchor. Never infer QA
+                # solely from a filename or an image's presence on disk.
+                if provider == "wan22_local" and (
+                    str(scene.get("anchor_qa_status") or scene.get("image_qa_status")
+                        or "").upper() != "APPROVED"
+                ):
+                    raise VideoProviderPolicyError("QA-approved still anchor required")
+                image_source = (
+                    scene.get("approved_still_path")
+                    or scene.get("approved_image_path")
+                    or scene.get("anchor_local_path")
+                ) if provider == "wan22_local" else None
+                result = request_video(
+                    provider, prompt, slot,
+                    timeout=1800 if provider == "wan22_local" else 380,
+                    image_file=image_source,
                 )
+                remote = validated_path(provider, result, slot=slot)
+                if provider == "wan22_local":
+                    shutil.copyfile(remote, partial)
+                else:
+                    call(
+                        ["scp", "-q", "-o", "BatchMode=yes", "bobby-nuc:" + remote, partial],
+                        timeout=100,
+                    )
                 if provider != "firefly":
                     _normalize_video_length(partial)
                 if not moving(partial):
@@ -369,7 +392,9 @@ def video_scene(
                     "zero_credits_verified": (
                         result.get("firefly_fair_use") is True
                         and result.get("credit_spending_allowed") is False
-                        if provider == "firefly" else False
+                        if provider == "firefly"
+                        else provider == "wan22_local"
+                        and result.get("no_external_api_credits") is True
                     ),
                     "source_video": True,
                 }
