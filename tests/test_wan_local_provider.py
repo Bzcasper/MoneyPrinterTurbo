@@ -69,6 +69,18 @@ class WanLocalProviderTests(unittest.TestCase):
             }}))
             self.assertEqual(router.scene_provider_order(1, health_file=health), ('metaai',))
 
+    def test_old_cloud_canary_refuses_local_wan_without_mutating_health(self):
+        from scripts import music_factory_provider_canary as legacy
+        self.assertNotIn('wan22_local', legacy.CLOUD_CANARY_PROVIDERS)
+        with tempfile.TemporaryDirectory() as d:
+            fake=Path(d)/'health.json'
+            fake.write_text('{"wan22_local":{"motion_verified":true}}')
+            before=fake.read_bytes()
+            with patch.object(legacy, 'HEALTH', fake):
+                with self.assertRaisesRegex(ValueError,'separately verified'):
+                    legacy.verify_provider('wan22_local',activate=True,timeout=1)
+            self.assertEqual(fake.read_bytes(),before)
+
     def test_wan_without_verified_receipt_does_not_submit(self):
         with tempfile.TemporaryDirectory() as d:
             with patch.object(wan, 'HEALTH', Path(d) / 'empty.json'):

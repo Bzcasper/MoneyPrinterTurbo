@@ -66,3 +66,10 @@ media-studio/wan2.2-canary/mpt-integration-backup-20261120.
 Do not enable publishing from a video-generation success response. Do not
 automatically retry previously failed billed-provider work without matching
 provider entitlement, technical QA, semantic QA, and explicit provider choice.
+
+### Provider canary CLI separation
+
+The existing music_factory_provider_canary.py command accepts only remote
+cloud video providers. wan22_local is deliberately excluded: it requires an
+approved local source still plus an independently verified full-size native
+video receipt. A text-only canary must never overwrite its health ledger entry.

@@ -18,6 +18,12 @@ from scripts.music_factory_provider_router import (
 )
 from scripts.music_factory_worker import _normalize_video_length, moving
 
+# Wan requires a QA-approved image-first source and a dedicated local-video
+# certification flow, not a text-only webhook canary.
+CLOUD_CANARY_PROVIDERS = tuple(
+    name for name in PROVIDERS[1:] if name != "wan22_local"
+)
+
 CANARY_DIR = Path("/home/bobby/.cache/scene-continuity/video-canaries")
 PROMPT = (
     "Cinematic five-second native moving-video shot, no cuts: "
@@ -31,8 +37,11 @@ PROMPT = (
 
 
 def verify_provider(provider: str, *, activate: bool, timeout: int) -> dict:
-    if provider not in PROVIDERS[1:]:
-        raise ValueError("Use grok2api, metaai or qwenapi for optional canaries")
+    if provider not in CLOUD_CANARY_PROVIDERS:
+        raise ValueError(
+            "Use a supported cloud canary; Wan needs separately verified "
+            "native image-first motion evidence"
+        )
     CANARY_DIR.mkdir(parents=True, exist_ok=True)
     result = {"provider": provider, "verified_at": int(time.time()),
               "motion_verified": False, "approved_free_route": False}
@@ -77,7 +86,7 @@ def verify_provider(provider: str, *, activate: bool, timeout: int) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("provider", choices=PROVIDERS[1:])
+    parser.add_argument("provider", choices=CLOUD_CANARY_PROVIDERS)
     parser.add_argument("--approve-free-route", action="store_true")
     parser.add_argument("--timeout", type=int, default=330)
     options = parser.parse_args()
