@@ -150,6 +150,12 @@ class WanLocalProviderTests(unittest.TestCase):
                 with self.assertRaises(wan.WanUnavailable):
                     wan.prepare_input(root / 'missing.png')
 
+    def test_model_loader_uses_only_verified_local_rog_ssd_cache(self):
+        self.assertEqual(
+            wan.MODEL_MOUNT,
+            Path('/home/bobby/.local/share/media-studio/wan2.2-verified-local'))
+        self.assertEqual(wan.MANIFEST,wan.MODEL_MOUNT/'local-verified-manifest.json')
+
     def test_fp8_bundle_manifest_gate_fails_closed(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)

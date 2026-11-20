@@ -40,11 +40,15 @@ is not currently verified. No provider response can approve public publishing.
 ## Current model and performance constraints
 
 The Comfy-Org FP16 checkpoint is ~10GB, with ~6.74GB UMT5 and ~1.41GB VAE.
-The optional Kijai scaled FP8 checkpoint is ~5.28GB. All are on the NUC in
-read-only SSHFS storage; ComfyUI enumerates them through extra_model_paths.yaml.
-On the ROG, network model-loading latency and 8GB GPU memory are substantial
-constraints. A completed MP4 from a bounded engineering canary is a separate
-step from validating production resolution and throughput.
+The optional Kijai scaled FP8 checkpoint is ~5.28GB. The original weights
+remain verified on NUC storage. Initial 8GB ROG canaries using read-only NUC
+SSHFS were interrupted at KSampler after severe page-wait/swap pressure. The
+production adapter requires three independently SHA256-verified checkpoint
+files copied into the ROG's isolated local SSD cache, with an activation
+manifest and ComfyUI extra_model_paths.yaml switched at an idle queue boundary.
+Local transfer and activation are separately guarded and restorable. On this
+ROG, 22GB RAM and 8GB GPU memory still constrain generation. A small moving
+MP4 canary does not by itself validate 720p native production throughput.
 
 Qdrant prompts_v2 retrieval remains part of Media Studio's upstream image
 generation. This local video provider consumes the approved still and its

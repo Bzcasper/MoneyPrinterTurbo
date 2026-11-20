@@ -33,8 +33,10 @@ APPROVED_IMAGE_ROOTS = (
 # Its production use remains blocked until native motion QA proves this host.
 CHECKPOINT = "Wan2_2-TI2V-5B_fp8_e4m3fn_scaled_KJ.safetensors"
 CHECKPOINT_SHA256 = "a83f54a2450d5471e5721e59ab556afa2d8793e30280713e3796b254c5286b48"
-MANIFEST = STAGING / "verified-model-manifest-fp8-bundle.json"
-MODEL_MOUNT = Path("/home/bobby/.local/share/media-studio/wan-models")
+# Production routing never loads giant weights through SSHFS. A separate
+# SHA256-verified local ROG SSD bundle is required for fast, deterministic load.
+MODEL_MOUNT = Path("/home/bobby/.local/share/media-studio/wan2.2-verified-local")
+MANIFEST = MODEL_MOUNT / "local-verified-manifest.json"
 MIN_W = 1280
 MIN_H = 704
 SENTINEL = "wan22_local"
