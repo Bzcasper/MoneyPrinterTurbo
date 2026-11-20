@@ -6,8 +6,9 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 from time import perf_counter
-from typing import List
+from typing import List, Literal
 
 from loguru import logger
 from openai import AzureOpenAI, OpenAI
@@ -16,6 +17,7 @@ from openai.types.chat import ChatCompletion
 from app.config import config
 from app.models.llm_provider import DEFAULT_LLM_PROVIDER_ID, get_llm_provider
 from app.utils import utils
+from app.utils.request_logging import trace_sdk_call
 
 _max_retries = 5
 MIN_SCRIPT_PARAGRAPH_NUMBER = 1
@@ -42,8 +44,9 @@ _CONNECTION_FAILURE_MARKERS = (
 )
 _THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>", re.IGNORECASE | re.DOTALL)
 _UNCLOSED_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*$", re.IGNORECASE | re.DOTALL)
+_UNOPENED_THINK_BLOCK_RE = re.compile(r"^.*</think\s*>", re.IGNORECASE | re.DOTALL)
 _URL_USERINFO_RE = re.compile(
-    r"((?:https?|wss?)://)([^/\s?#@]*:[^/\s?#@]*@)", re.IGNORECASE
+    r"((?:https?|wss?)://)([^/\s?#@]+@)", re.IGNORECASE
 )
 _SENSITIVE_QUERY_RE = re.compile(
     r"([?&](?:api[_-]?key|access[_-]?token|token|key|secret|password)=)([^&#\s]+)",
@@ -193,6 +196,10 @@ def _normalize_text_response(content, llm_provider: str) -> str:
     # `<think>...</think>` 中返回。视频脚本和关键词只需要最终可朗读文本，
     # 如果不在服务层统一清理，WebUI、字幕和配音都会把思考过程当正文处理。
     content = _THINK_BLOCK_RE.sub("", content)
+    # DeepSeek R1、QwQ 等模型的对话模板会把起始 `<think>` 放进提示词，
+    # vLLM/Ollama 等网关返回的正文只剩 `推理...</think>答案`。成对清理之后
+    # 仍残留的闭合标签之前都是推理内容，也不能进入脚本。
+    content = _UNOPENED_THINK_BLOCK_RE.sub("", content)
     content = _UNCLOSED_THINK_BLOCK_RE.sub("", content).strip()
     if not content:
         raise ValueError(f"[{llm_provider}] returned empty text content")
@@ -392,7 +399,8 @@ def _generate_response(
             import dashscope
             from dashscope.api_entities.dashscope_response import GenerationResponse
 
-            response = dashscope.Generation.call(
+            response = trace_sdk_call(
+                llm_provider, base_url, dashscope.Generation.call,
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
                 api_key=api_key,
@@ -450,7 +458,8 @@ def _generate_response(
                     api_key=api_key,
                     http_options=http_options,
                 ) as client:
-                    response = client.models.generate_content(
+                    response = trace_sdk_call(
+                        llm_provider, base_url, client.models.generate_content,
                         model=model_name,
                         contents=prompt,
                         config=generation_config,
@@ -476,7 +485,8 @@ def _generate_response(
                 default_headers={"cf-aig-gateway-id": gateway_id},
                 **_sdk_transport_options(request_timeout, max_retries),
             )
-            response = client.chat.completions.create(
+            response = trace_sdk_call(
+                llm_provider, base_url, client.chat.completions.create,
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -490,7 +500,8 @@ def _generate_response(
                     f"{llm_provider}: model_name is not set, please set it in the config.toml file."
                 )
 
-            response = litellm.completion(
+            response = trace_sdk_call(
+                llm_provider, base_url, litellm.completion,
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
                 drop_params=True,
@@ -515,7 +526,8 @@ def _generate_response(
                 azure_endpoint=base_url,
                 **_sdk_transport_options(request_timeout, max_retries),
             )
-            response = client.chat.completions.create(
+            response = trace_sdk_call(
+                llm_provider, base_url, client.chat.completions.create,
                 model=model_name, messages=[{"role": "user", "content": prompt}]
             )
             if response:
@@ -530,6 +542,22 @@ def _generate_response(
                 raise Exception(
                     f"[{llm_provider}] returned an empty response, please check your network connection and try again."
                 )
+
+        if adapter in {"openai_codex", "openai_chatgpt"}:
+            if adapter == "openai_chatgpt":
+                from app.services import chatgpt_oauth as subscription_provider
+            else:
+                from app.services import codex_oauth as subscription_provider
+
+            timeout_seconds = coerce_claude_code_timeout(
+                extra_values.get("timeout"), provider.config_key("timeout")
+            )
+            if request_timeout is not None:
+                timeout_seconds = min(timeout_seconds, request_timeout)
+            return _normalize_text_response(
+                subscription_provider.generate_text(prompt, model_name, timeout_seconds),
+                llm_provider,
+            )
 
         if adapter == "claude_code":
             # Claude 订阅（Pro / Max / Team）不签发 API Key，其凭证只能由
@@ -701,7 +729,8 @@ def _generate_response(
                 default_headers=kimi_code_oauth.api_headers(),
                 **_sdk_transport_options(None, max_retries),
             )
-            response = client.chat.completions.create(
+            response = trace_sdk_call(
+                llm_provider, base_url, client.chat.completions.create,
                 model=request_model, messages=[{"role": "user", "content": prompt}]
             )
             if response and isinstance(response, ChatCompletion):
@@ -717,7 +746,8 @@ def _generate_response(
                 base_url=base_url,
                 **_sdk_transport_options(request_timeout, max_retries),
             )
-            response = sdk_stream = client.chat.completions.create(
+            response = sdk_stream = trace_sdk_call(
+                llm_provider, base_url, client.chat.completions.create,
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
                 extra_body={"enable_thinking": False},
@@ -744,7 +774,24 @@ def _generate_response(
             **_sdk_transport_options(request_timeout, max_retries),
         )
 
-        response = client.chat.completions.create(
+        if adapter == "openai_responses":
+            # APIXO 的 GPT 模型仅支持 Responses；未完成的响应可能带有部分
+            # 正文，必须先确认完成状态，避免把截断文案交给配音和素材生成。
+            response = trace_sdk_call(
+                llm_provider, base_url, client.responses.create,
+                model=model_name, input=prompt,
+            )
+            if getattr(response, "status", None) != "completed":
+                raise ValueError(
+                    f"[{llm_provider}] response did not complete "
+                    f"(status={getattr(response, 'status', None)})"
+                )
+            return _normalize_text_response(
+                getattr(response, "output_text", None), llm_provider
+            )
+
+        response = trace_sdk_call(
+            llm_provider, base_url, client.chat.completions.create,
             model=model_name, messages=[{"role": "user", "content": prompt}]
         )
         if response:
@@ -953,7 +1000,7 @@ def generate_script(
                 # that text through would make the task treat it as narration.
                 raise ValueError(response)
             if response:
-                candidate = format_response(response).strip()
+                candidate = format_response(_strip_code_fence(response)).strip()
             else:
                 logging.error("gpt returned an empty response")
                 candidate = ""
@@ -1044,6 +1091,37 @@ def generate_terms(
             '"search term 4", "search term 5"]'
         )
 
+    term_rule = (
+        "each search term should consist of 1-3 words, "
+        "always add the main subject of the video."
+    )
+    language_rule = "reply with english search terms only."
+    language_reminder = (
+        "Please note that you must use English for generating video search terms; "
+        "Chinese is not accepted."
+    )
+    if keyword_language == "zh":
+        term_rule = (
+            "每个关键词用简短的中文短语描述一个素材库里可检索的画面，"
+            "提取人物、物体、动作或场景。避开抽象概念和重复画面，"
+            "在数量限制内覆盖文案开头、中段和结尾的代表场景。"
+        )
+        language_rule = "每个关键词都必须包含简体中文，可保留 AI 等常用缩写。"
+        language_reminder = ""
+        output_example = json.dumps(
+            [
+                "海边日出",
+                "渔船出港",
+                "渔船撒网",
+                "渔网收鱼",
+                "海鲜市场",
+                "厨师切鱼",
+                "烤鱼特写",
+                "港口夜景",
+            ][:amount],
+            ensure_ascii=False,
+        )
+
     prompt = f"""
 # Role: Video Search Terms Generator
 
@@ -1052,10 +1130,10 @@ def generate_terms(
 
 ## Constrains:
 1. the search terms are to be returned as a json-array of strings.
-2. each search term should consist of 1-3 words, always add the main subject of the video.
+2. {term_rule}
 3. you must only return the json-array of strings. you must not return anything else. you must not return the script.
 4. the search terms must be related to the subject of the video.
-5. reply with english search terms only.
+5. {language_rule}
 {ordering_rule}
 
 ## Output Example:
@@ -1068,7 +1146,7 @@ def generate_terms(
 ### Video Script
 {video_script}
 
-Please note that you must use English for generating video search terms; Chinese is not accepted.
+{language_reminder}
 """.strip()
 
     custom_terms_prompt = str(terms_prompt or "").strip()
@@ -1228,7 +1306,8 @@ def _normalize_hashtags(raw, count: int) -> List[str]:
     重复标签或不符合常见格式的 hashtag。
     """
     if isinstance(raw, str):
-        candidates = re.split(r"[\s,]+", raw)
+        # CJK text separates tags with ，、； and no spaces; # starts a new tag.
+        candidates = re.split(r"[\s,，、;；#]+", raw)
     elif isinstance(raw, (list, tuple)):
         # 数组里的每一项视为一个完整标签，因此 "du lich" 会变成
         # "#dulich"，而不是拆成两个标签。
@@ -1239,7 +1318,24 @@ def _normalize_hashtags(raw, count: int) -> List[str]:
     seen = set()
     result: List[str] = []
     for item in candidates:
-        tag = re.sub(r"[^\w]", "", item, flags=re.UNICODE)
+        # 印地语、泰语等依赖组合符，不能像 \w 那样直接删除。但组合符必须
+        # 附着于保留的字符；emoji 被删除后，其变体选择符也应丢弃，否则
+        # #☕️ 会留下只有不可见字符的标签，#coffee☕️ 也无法与 #coffee 去重。
+        # 数字本身会保留，因此还需清理 emoji 展示选择符和键帽组合符，
+        # 让 #1️⃣ 与 #1 一致；其它语言组合符和 CJK 字形变体仍按附着规则保留。
+        characters = []
+        can_attach_mark = False
+        for character in item:
+            if character in {"\ufe0e", "\ufe0f", "\u20e3"}:
+                can_attach_mark = False
+            elif character.isalnum() or character == "_":
+                characters.append(character)
+                can_attach_mark = True
+            elif can_attach_mark and unicodedata.category(character).startswith("M"):
+                characters.append(character)
+            else:
+                can_attach_mark = False
+        tag = "".join(characters)
         if not tag:
             continue
         key = tag.lower()
@@ -1320,6 +1416,41 @@ def _parse_social_metadata(response: str, platform: str) -> dict:
     return {"title": title, "caption": caption, "hashtags": hashtags}
 
 
+# A period with a following space is not the end of the first sentence when
+# it marks a numbered tip at the start of a line ("1. Save weekly."), closes a
+# dotted abbreviation ("U.S. policy", "10:30 a.m."), or follows a short title
+# ("No. 1", "Mr. Smith", "Fig. 3"). "My score is 42." and "option A." still end
+# the sentence. "2.0" has no space after the dot and never reaches this check.
+_SOCIAL_TITLE_ABBREVIATIONS = frozenset(
+    {"no", "fig", "vol", "mr", "mrs", "ms", "dr", "st", "prof", "jr", "sr"}
+)
+_SOCIAL_TITLE_BREAK = re.compile(r"(?<=[.!?])\s+|(?<=[。！？])\s*")
+_SOCIAL_TITLE_TOKEN = re.compile(r"[A-Za-z]+$|[0-9]+$")
+
+
+def _first_social_title_sentence(script: str) -> str:
+    """Return the first sentence of a fallback title."""
+    for match in _SOCIAL_TITLE_BREAK.finditer(script):
+        punctuation = script[match.start() - 1]
+        if punctuation != ".":
+            return script[: match.start()]
+        head = script[: match.start() - 1]
+        token = _SOCIAL_TITLE_TOKEN.search(head)
+        if token is None:
+            return script[: match.start()]
+        word = token.group()
+        before = head[: token.start()].rstrip(" \t")
+        if word.isdigit():
+            is_marker = not before or before.endswith("\n")
+        elif len(word) == 1:
+            is_marker = before.endswith(".")
+        else:
+            is_marker = word.lower() in _SOCIAL_TITLE_ABBREVIATIONS
+        if not is_marker:
+            return script[: match.start()]
+    return script
+
+
 def _fallback_social_metadata(
     video_subject: str, video_script: str, platform: str
 ) -> dict:
@@ -1329,8 +1460,8 @@ def _fallback_social_metadata(
 
     title = subject
     if not title and script:
-        # 没有主题时，用脚本第一句兜底生成 title，避免接口返回空标题。
-        title = re.split(r"(?<=[.!?。！？])\s+", script)[0]
+        # 中日文句末通常没有空格；英文仍要求空白，避免拆开 2.0 等数字。
+        title = _first_social_title_sentence(script)
 
     return {
         "title": _clamp_text(title, spec["title_max"]),

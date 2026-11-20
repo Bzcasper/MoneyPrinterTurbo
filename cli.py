@@ -42,11 +42,15 @@ _CLI_VIDEO_SOURCES = (
     "pexels",
     "pixabay",
     "coverr",
+    "aigei",
     "wavespeed",
     "volcengine_seedance",
     "ofox",
+    "infistar",
+    "jalapeno",
     "metaso_minimax",
     "muapi",
+    "useapi",
     "openai_image",
     "firefly",
     "local",
@@ -223,6 +227,13 @@ def _video_fit_mode(value: str) -> str:
     return normalized
 
 
+def _image_motion(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in {"static", "zoom"}:
+        raise argparse.ArgumentTypeError("image-motion must be one of: static, zoom")
+    return normalized
+
+
 # 只有这些取值会请求外部音乐生成服务，因此只有它们消费配乐提示词。取值需与
 # app/services/task.py 的 _VIDEO_MUSIC_PROVIDERS 保持一致；集中定义后，新增
 # 配乐供应商不会再次遗漏 --bgm-type 校验、批量校验和提示词参数。
@@ -242,8 +253,17 @@ def _bgm_type(value: str) -> str:
     )
 
 
+def _useapi_image_needs_confirmation() -> bool:
+    """Kling image models spend Kling credits; Nano Banana models do not."""
+    from app.services import useapi
+
+    return useapi.image_requires_confirmation()
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    command = "mpt cli" if __name__ == "app.cli" else "uv run python cli.py"
     parser = argparse.ArgumentParser(
+        prog="mpt cli" if __name__ == "app.cli" else None,
         description=(
             "Generate MoneyPrinterTurbo videos without the WebUI.\n\n"
             "Provider settings and credentials are read from config.toml.\n"
@@ -297,7 +317,7 @@ Batch manifests:
   storage/resource lookup rules. --stop-at is a batch-wide CLI option. The summary has
   total, succeeded, failed, and tasks keys; every task entry has index, task_id,
   status, result, failed_stage, and error.
-""",
+""".replace("uv run python cli.py", command),
         formatter_class=_CliHelpFormatter,
     )
 
@@ -365,6 +385,11 @@ Batch manifests:
         help="stop after this pipeline stage; see the stage order below",
     )
     material_group.add_argument(
+        "--confirm-aigei-charge",
+        action="store_true",
+        help="allow Aigei to charge copper coins for stock video downloads",
+    )
+    material_group.add_argument(
         "--confirm-wavespeed-charge",
         action="store_true",
         help=(
@@ -379,6 +404,14 @@ Batch manifests:
             "confirm that Volcano Engine Seedance creates paid Ark tasks; required "
             "with --video-source volcengine_seedance for materials or video output"
         ),
+    )
+    material_group.add_argument(
+        "--confirm-jalapeno-charge", action="store_true",
+        help="confirm paid Jalapeno Cloud video generation for materials or video output",
+    )
+    material_group.add_argument(
+        "--confirm-infistar-charge", action="store_true",
+        help="confirm paid Infistar video generation for materials or video output",
     )
     material_group.add_argument(
         "--confirm-ofox-charge",
@@ -402,6 +435,16 @@ Batch manifests:
         help=(
             "confirm that MuAPI video generation creates paid tasks; required "
             "with --video-source muapi for materials or video output"
+        ),
+    )
+    material_group.add_argument(
+        "--confirm-useapi-charge",
+        action="store_true",
+        help=(
+            "confirm that useapi.net videos and Kling images spend credits on "
+            "your own Google AI plan, Kling AI account or Dreamina account; "
+            "required with --video-source useapi, and with useapi_image when "
+            "useapi_image_model is a Kling model, for materials or video output"
         ),
     )
 
@@ -433,6 +476,13 @@ Batch manifests:
         choices=["random", "sequential"],
         default=None,
         help="source clip concatenation order (default: random)",
+    )
+    video_group.add_argument(
+        "--image-motion",
+        type=_image_motion,
+        choices=["static", "zoom"],
+        default=None,
+        help="motion for local or AI-generated images (default: zoom)",
     )
     video_group.add_argument(
         "--video-transition-mode",
@@ -730,6 +780,11 @@ Batch manifests:
     if not args.batch_file and args.video_source != "local" and has_video_materials:
         parser.error("--video-materials can only be used with --video-source local")
     if (
+        not args.batch_file and args.video_source == "aigei"
+        and stage_requires_materials and not args.confirm_aigei_charge
+    ):
+        parser.error("--confirm-aigei-charge is required with --video-source aigei")
+    if (
         not args.batch_file
         and args.video_source == "wavespeed"
         and stage_requires_materials
@@ -777,6 +832,33 @@ Batch manifests:
         parser.error(
             "--confirm-muapi-charge is required with --video-source muapi"
         )
+    if (
+        not args.batch_file
+        and args.video_source == "useapi"
+        and stage_requires_materials
+        and not args.confirm_useapi_charge
+    ):
+        parser.error(
+            "--confirm-useapi-charge is required with --video-source useapi"
+        )
+    if (
+        not args.batch_file
+        and args.video_source == "useapi_image"
+        and stage_requires_materials
+        and not args.confirm_useapi_charge
+        and _useapi_image_needs_confirmation()
+    ):
+        parser.error(
+            "--confirm-useapi-charge is required with --video-source "
+            "useapi_image when useapi_image_model is a Kling model"
+        )
+
+    if (not args.batch_file and args.video_source == "infistar"
+            and stage_requires_materials and not args.confirm_infistar_charge):
+        parser.error("--confirm-infistar-charge is required with --video-source infistar")
+    if (not args.batch_file and args.video_source == "jalapeno"
+            and stage_requires_materials and not args.confirm_jalapeno_charge):
+        parser.error("--confirm-jalapeno-charge is required with --video-source jalapeno")
 
     if args.bgm_file:
         if args.bgm_type in (None, "custom"):
@@ -941,6 +1023,7 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         "video_script_prompt",
         "custom_system_prompt",
         "video_fit_mode",
+        "image_motion",
         "video_concat_mode",
         "video_transition_mode",
         "video_clip_duration",
@@ -979,6 +1062,7 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
     ui_defaults = (
         ("video_clip_speed", float, _clip_speed),
         ("video_fit_mode", str, _video_fit_mode),
+        ("image_motion", str, _image_motion),
         ("font_name", str, None),
         ("subtitle_display_mode", str, _subtitle_display_mode),
         ("subtitle_animation", str, _subtitle_animation),
@@ -1180,6 +1264,10 @@ def _validate_batch_task_params(
     ofox_charge_confirmed: bool,
     metaso_minimax_charge_confirmed: bool,
     muapi_charge_confirmed: bool,
+    infistar_charge_confirmed: bool = False,
+    jalapeno_charge_confirmed: bool = False,
+    useapi_charge_confirmed: bool = False,
+    aigei_charge_confirmed: bool = False,
 ) -> None:
     if not params.video_subject.strip() and not params.video_script.strip():
         raise ValueError("one of video_subject or video_script is required")
@@ -1212,6 +1300,11 @@ def _validate_batch_task_params(
         )
     if params.video_source != "local" and params.video_materials:
         raise ValueError("video_materials can only be used with video_source=local")
+    if (
+        params.video_source == "aigei" and stop_at in {"materials", "video"}
+        and not aigei_charge_confirmed
+    ):
+        raise ValueError("--confirm-aigei-charge is required with video_source=aigei")
     if (
         params.video_source == "wavespeed"
         and stop_at in {"materials", "video"}
@@ -1248,6 +1341,30 @@ def _validate_batch_task_params(
         and not muapi_charge_confirmed
     ):
         raise ValueError("--confirm-muapi-charge is required for MuAPI video generation")
+    if (
+        params.video_source == "useapi"
+        and stop_at in {"materials", "video"}
+        and not useapi_charge_confirmed
+    ):
+        raise ValueError(
+            "--confirm-useapi-charge is required for useapi.net video generation"
+        )
+    if (
+        params.video_source == "useapi_image"
+        and stop_at in {"materials", "video"}
+        and not useapi_charge_confirmed
+        and _useapi_image_needs_confirmation()
+    ):
+        raise ValueError(
+            "--confirm-useapi-charge is required for useapi.net Kling images"
+        )
+
+    if (params.video_source == "infistar" and stop_at in {"materials", "video"}
+            and not infistar_charge_confirmed):
+        raise ValueError("--confirm-infistar-charge is required for Infistar video generation")
+    if (params.video_source == "jalapeno" and stop_at in {"materials", "video"}
+            and not jalapeno_charge_confirmed):
+        raise ValueError("--confirm-jalapeno-charge is required for Jalapeno Cloud video generation")
 
     if stop_at == "subtitle" and not params.subtitle_enabled:
         raise ValueError("stop_at=subtitle cannot be combined with disabled subtitles")
@@ -1362,6 +1479,10 @@ def _build_batch_tasks(args: argparse.Namespace) -> list[VideoParams]:
                     args.confirm_metaso_minimax_charge
                 ),
                 muapi_charge_confirmed=args.confirm_muapi_charge,
+                infistar_charge_confirmed=args.confirm_infistar_charge,
+                jalapeno_charge_confirmed=args.confirm_jalapeno_charge,
+                useapi_charge_confirmed=args.confirm_useapi_charge,
+                aigei_charge_confirmed=args.confirm_aigei_charge,
             )
         except (TypeError, ValueError) as exc:
             raise ValueError(f"invalid batch task {index}: {exc}") from exc
@@ -1719,6 +1840,12 @@ def _run_batch_tasks(args: argparse.Namespace, tasks: list[VideoParams]) -> int:
 
 def run_cli(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    import app.config  # noqa: F401 -- 初始化配置及进程日志设置。
+    from app.utils.logging_utils import configure_terminal_logger, get_logging_options
+
+    # 配置模块默认把终端日志发往 stdout。CLI 的 stdout 是机器可读 JSON，
+    # 必须在素材预处理等步骤开始前切到 stderr，帮助和参数错误仍保持延迟导入。
+    configure_terminal_logger(sys.stderr, level=get_logging_options()[0], colorize=False)
     if args.batch_file:
         try:
             tasks = _build_batch_tasks(args)
@@ -1771,26 +1898,8 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _force_utf8_console() -> None:
-    """Make stdout/stderr UTF-8 before anything is printed.
-
-    Windows consoles default to a legacy code page (cp1252 in Western
-    Europe). Generating a French video produces U+202F, the narrow no-break
-    space French typography puts before ':' and '!', and Loguru's own progress
-    lines carry circled digits. Either one raises UnicodeEncodeError, which
-    kills the process *after* the video was written successfully -- so the run
-    reports failure and never prints where the file is.
-    """
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is None:
-            continue
-        try:
-            reconfigure(encoding="utf-8", errors="replace")
-        except (ValueError, OSError):
-            continue
-
-
 if __name__ == "__main__":
-    _force_utf8_console()
+    from app.utils.logging_utils import force_utf8_console
+
+    force_utf8_console()
     raise SystemExit(run_cli())

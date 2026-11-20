@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Annotated, Any, List, Literal, Optional, Union
 
 import pydantic
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from app.config import config
 
@@ -51,6 +51,11 @@ class VideoFitMode(str, Enum):
 
     cover = "cover"
     contain = "contain"
+
+
+class ImageMotion(str, Enum):
+    static = "static"
+    zoom = "zoom"
 
 
 SubtitleDisplayMode = Literal["sentence", "word_by_word"]
@@ -106,9 +111,10 @@ class VideoParams(BaseModel):
     video_subject: str
     video_script: str = ""  # Script used to generate the video
     video_terms: Optional[str | List[str]] = None  # Keywords used to generate the video
-    video_aspect: Optional[VideoAspect] = VideoAspect.portrait.value
+    video_aspect: Optional[VideoAspect] = VideoAspect.portrait
     video_fit_mode: VideoFitMode = VideoFitMode.cover
-    video_concat_mode: Optional[VideoConcatMode] = VideoConcatMode.random.value
+    image_motion: ImageMotion = ImageMotion.zoom
+    video_concat_mode: Optional[VideoConcatMode] = VideoConcatMode.random
     video_transition_mode: Optional[VideoTransitionMode] = None
     video_clip_duration: int = Field(default=5, ge=1)
     video_clip_speed: Optional[float] = 1.0
@@ -281,6 +287,16 @@ class TaskVideoRequest(VideoParams, BaseModel):
     video_count: int = Field(default=1, ge=1, le=5)
     video_clip_duration: int = Field(default=5, ge=1, le=15)
     n_threads: Optional[int] = Field(default=2, ge=1, le=16)
+    confirm_aigei_charge: StrictBool = Field(
+        default=False,
+        exclude=True,
+        description="Allow Aigei to charge copper coins for this task's video downloads.",
+    )
+
+    # A request without voice_name uses the same Edge voice as /audio and
+    # /subtitle. Edge TTS accepts no empty voice, so with the empty default
+    # of VideoParams the task failed at the audio stage, after the LLM calls.
+    voice_name: Optional[str] = "zh-CN-XiaoxiaoNeural-Female"
 
 
 class TaskQueryRequest(BaseModel):

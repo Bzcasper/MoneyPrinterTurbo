@@ -33,12 +33,12 @@
 ## 特别感谢 ❤️
 
 <div align="center">
-  <a href="https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo" target="_blank"><img src="https://gcdn.moonshot.cn/growth-cdn/sponsor/kimi-zh.png" alt="Kimi 赞助 MoneyPrinterTurbo" width="100%"></a>
+  <a href="https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo" target="_blank"><img src="docs/sponsors/kimi-k3.1-pro-banner-zh.webp" alt="Kimi 赞助 MoneyPrinterTurbo" width="100%"></a>
 </div>
 
-感谢 [Kimi](https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo) 赞助本项目！[Kimi K3](https://www.kimi.com/blog/kimi-k3?aff=moneyprinterturbo) 是 Moonshot AI 迄今能力最强的模型，也是全球首个开源 3T 级模型，拥有原生视觉能力与 100 万 Token 上下文，在知识工作、推理和长周期任务中展现前沿性能。在 MoneyPrinterTurbo 中，K3 能直接驱动视频创作，不仅撰写视频文案，还会提炼素材搜索关键词、决定成片画面；对内容理解越准确，匹配到的素材就越贴题。
+感谢 [Kimi](https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo) 赞助本项目！[Kimi K3.1 Pro](https://www.kimi.com/blog/kimi-k3?aff=moneyprinterturbo) 是 Moonshot AI 迄今能力最强的 3T 级开放权重模型，拥有原生视觉能力与 100 万 Token 上下文，在知识工作、推理和长周期任务中展现前沿性能。在 MoneyPrinterTurbo 中，K3.1 Pro 能直接驱动视频创作，不仅撰写视频文案，还会提炼素材搜索关键词、决定成片画面；对内容理解越准确，匹配到的素材就越贴题。
 
-**MoneyPrinterTurbo 用户专属优惠：新用户通过专属链接注册，首次成功充值可获充值金额 10% 的 API 额度，最高赠送 ¥1000。活动截至 2026 年 12 月 31 日。前往 Kimi 开放平台（[中文站](https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo)｜[Global](https://platform.kimi.ai?track_id=track-9e3b711aa2594e378f6fe5b8de718a76&aff=moneyprinterturbo)）体验 API。**
+**MoneyPrinterTurbo 用户专属优惠：新用户通过专属链接注册，首次成功充值可获充值金额 10% 的 API 额度。活动截至 2026 年 12 月 31 日。前往 Kimi 开放平台（[中文站](https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo)｜[Global](https://platform.kimi.ai?track_id=track-9e3b711aa2594e378f6fe5b8de718a76&aff=moneyprinterturbo)）体验 API。**
 <br>
 
 <table align="center">
@@ -116,14 +116,6 @@
   </tr>
   <tr>
     <td align="center" width="120">
-      <a href="https://sidrune.ai/register?source=github&amp;campaign=moneyprinterturbo&amp;promo=moneyprinterturbo"><img src="docs/sponsors/sidrune-logo.png" alt="Sidrune AI" width="120"></a>
-    </td>
-    <td align="left">
-      感谢 <a href="https://sidrune.ai/register?source=github&amp;campaign=moneyprinterturbo&amp;promo=moneyprinterturbo">Sidrune AI</a> 赞助本项目！<strong>一个入口，接入并管理全球主流 AI 模型。</strong>Sidrune AI 面向个人开发者、技术团队与企业，通过统一 API 接入并管理全球主流 AI 模型，多线路动态调度提升可用性，模型表现、响应时间与费用透明可查。根据不同模型与线路，<strong>API 调用成本较官方或基准价格可降低 40%～98%</strong>。通过<a href="https://sidrune.ai/register?source=github&amp;campaign=moneyprinterturbo&amp;promo=moneyprinterturbo">专属链接注册</a>，即可获得 <strong>&#36;3 API 额度</strong>。
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="120">
       <a href="https://www.runninghub.ai/call-api?source=github"><img src="docs/sponsors/runninghub-logo.png" alt="RunningHub" width="56"></a><br>
       <a href="https://www.runninghub.ai/call-api?source=github">RunningHub API</a>
     </td>
@@ -136,6 +128,74 @@
       • 400+ 主流模型（<strong>支持国际版权限</strong>）8000+版本<strong>任选</strong><br>
       • 数千家企业信赖，<strong>500万C端月活</strong>验证<br>
       折扣与免费测试可联系 <a href="mailto:zhenyuedong@haima.me">zhenyuedong@haima.me</a>，或<a href="https://www.runninghub.ai/call-api?source=github">查看模型与接口</a>。
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="120">
+      <a href="https://www.jalapeno-cloud.ai/MoneyPrinterTurbo"><img src="docs/sponsors/jalapeno-logo.png" alt="Jalapeno Cloud" width="56"></a><br>
+      <a href="https://www.jalapeno-cloud.ai/MoneyPrinterTurbo"><strong>Jalapeno Cloud</strong></a>
+    </td>
+    <td align="left">
+      感谢 <a href="https://www.jalapeno-cloud.ai/MoneyPrinterTurbo">Jalapeno Cloud</a> 赞助本项目！<br>
+      一站式接入多种 AI 模型，兼容 OpenAI 与 Anthropic API，满足 AI 应用开发与内容创作需求。<br>
+      新用户注册领免费额度，充值<strong>额外赠送最高 20%</strong>；DeepSeek-V4.1-flash、GLM-5.3-flash 等模型<strong>低至 5 折</strong>，Doubao-Seedance-2.5 <strong>长期 9 折</strong>。官方源头，品质保证。<br>
+      👉 <a href="https://www.jalapeno-cloud.ai/MoneyPrinterTurbo">立即注册，领取专属体验金</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="120">
+      <a href="https://apinebula.ai/ref/luDuqJIb"><img src="docs/sponsors/apinebula-logo.png" alt="APINEBULA" width="56" height="56"></a><br>
+      <a href="https://apinebula.ai/ref/luDuqJIb"><strong>APINEBULA</strong></a>
+    </td>
+    <td align="left">
+      感谢 <a href="https://apinebula.ai/ref/luDuqJIb">APINEBULA</a> 赞助本项目！<br>
+      APINEBULA 是银河录像局旗下的企业级 AI 聚合平台，依托大平台资源，为开发者、团队与企业提供稳定、高性价比的大模型 API 接入服务。<br>
+      聚合 Claude、GPT、Gemini 等主流满血模型，一个接口即可接入全球顶尖 AI 大模型，价格<strong>低至 0.6 折</strong>；支持企业级高并发，提供<strong>正式合同、对公打款与开票服务</strong>。<br>
+      通过<a href="https://apinebula.ai/ref/luDuqJIb">专属链接注册</a>，充值时填写优惠码 <strong>MPT</strong>，即可享<strong>九折优惠</strong>！
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="120">
+      <a href="https://apixo.ai/zh?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=harry0703&amp;utm_content=moneyprinterturbo_logo"><img src="docs/sponsors/apixo-seedream-zh.png" alt="APIXO AI：Seedream 5.5 官价七折，&#36;0.014/张起" width="100" height="100"></a><br>
+      <a href="https://apixo.ai/zh?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=harry0703&amp;utm_content=moneyprinterturbo_text_brand"></a>
+    </td>
+    <td align="left">
+      <strong><a href="https://apixo.ai/zh?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=harry0703&amp;utm_content=moneyprinterturbo_text_brand">APIXO AI</a>：一站式 AI 图片与视频创作平台</strong><br>
+      在 <strong>APIXO AI</strong> 网页生成图片与视频，也可通过 API 接入应用与自动化流程。<br>
+      <strong><a href="https://apixo.ai/zh/models/seedream-5-5?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=harry0703&amp;utm_content=moneyprinterturbo_text_model">Seedream 5.5</a> 文生图 API 限时官价七折，&#36;0.014/张起。</strong><br>
+      <a href="https://apixo.ai/zh/deals/black-friday?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=harry0703&amp;utm_content=moneyprinterturbo_text_deals">探索 APIXO AI 模型与优惠 →</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="120">
+      <a href="https://www.openlux.ai/register?channel=c_rejpjkhg"><img src="docs/sponsors/openlux-logo.png" alt="OpenLux" width="100"></a>
+    </td>
+    <td align="left">
+      感谢 <a href="https://www.openlux.ai/register?channel=c_rejpjkhg">OpenLux</a> 对本项目的赞助！<br>OpenLux 是一个面向企业的<strong>一站式 AI 聚合平台</strong>，汇集全球各大厂商主流大模型，平台提供高效、稳定的服务与及时的技术支持。Claude、OpenAI、Gemini 系列模型基准折扣分别低至<strong>官方的 0.882 折、0.4 折和 0.8 折</strong>。<br>
+      MoneyPrinterTurbo 用户还可享受专属福利：通过专属链接注册，充值<strong>最高可享 7.5% 优惠</strong>！<br>
+      <a href="https://www.openlux.ai/register?channel=c_rejpjkhg">立即体验 OpenLux →</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="120">
+      <a href="https://link.bach.art/4iW1qZL"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/sponsors/video-rebirth-logo-dark.svg"><img src="docs/sponsors/video-rebirth-logo-light.svg" alt="Video Rebirth" height="56"></picture></a><br>
+      <a href="https://link.bach.art/4iW1qZL"><strong>Video Rebirth</strong></a>
+    </td>
+    <td align="left">
+      感谢 <a href="https://link.bach.art/4iW1qZL">Video Rebirth</a> 赞助本项目！Video Rebirth 打造面向生产的工业级视频模型 <strong>BACH</strong>。<strong>BACH1.0 Pro 于 2026 年 10 月位列 Artificial Analysis 图生视频排行榜第 2 名</strong>。<br>
+      同时开源 HyperFlow 系列，<strong>HyperFlow H3 Flash 发布六天内下载量突破 50 万次</strong>。视频生成价格低至 <strong>&#36;0.03/秒起</strong>。
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="120">
+      <a href="https://www.aigei.com/?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=moneyprinterturbo&amp;utm_content=readme_zh_logo"><img src="docs/sponsors/aigei-logo.png" alt="爱给网" width="112"></a><br>
+      <a href="https://www.aigei.com/?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=moneyprinterturbo&amp;utm_content=readme_zh_brand"><strong>爱给网</strong></a>
+    </td>
+    <td align="left">
+      感谢<a href="https://www.aigei.com/?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=moneyprinterturbo&amp;utm_content=readme_zh_thanks">爱给网</a>对本项目的支持与赞助！爱给网是<strong>一站式数字创意素材平台</strong>，汇集音效、配乐、视频、图片、3D 模型及游戏素材，覆盖短视频制作、影视后期、游戏开发和设计创作。从视频画面、背景配乐到场景音效，为创作提供丰富选择。<br>
+      爱给开放平台支持 <strong>REST API 与 MCP 接入</strong>，提供音效、配乐、视频和图片的搜索、筛选及文件获取能力，方便接入自动化视频制作、程序化剪辑和 AI 创作工作流，减少手动查找与整理素材的步骤。<br>
+      🎁 <strong>搜索与详情查询免费</strong>，支持游客及登录用户下载，并提供<strong>免费下载额度</strong>。具体额度、费用及素材授权范围以平台说明为准。<br>
+      👉 <a href="https://www.aigei.com/open?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=moneyprinterturbo&amp;utm_content=readme_zh_open_platform">立即体验爱给开放平台</a> · <a href="https://www.aigei.com/?utm_source=github&amp;utm_medium=sponsorship&amp;utm_campaign=moneyprinterturbo&amp;utm_content=readme_zh_asset_library">浏览爱给素材库</a>
     </td>
   </tr>
   <tr>
@@ -160,23 +220,23 @@
 
 ## 作者的另一个开源项目：MangoDisk ⭐
 
-<p align="center">
-  <a href="https://mangodisk.app/zh">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/screenshots/zh/dark-01-deep-cleanup.jpg?ver=1.1.0">
-      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/screenshots/zh/light-01-deep-cleanup.jpg?ver=1.1.0">
-      <img src="https://assets.mangodisk.app/images/screenshots/zh/light-01-deep-cleanup.jpg?ver=1.1.0" width="900" alt="MangoDisk 深度清理界面">
-    </picture>
-  </a>
-</p>
-
-<p align="center">
-  <strong>面向 macOS 和 Windows 的开源磁盘清理、空间分析与系统优化工具</strong><br>
+<p align="left">
+  <strong>面向 macOS、Windows 和 Linux 的开源磁盘清理、空间分析与系统优化工具</strong><br>
   一站式清理缓存、大文件、重复文件和应用残留，并提供磁盘空间分析、应用卸载、启动项管理、系统优化与维护
 </p>
 
-<p align="center">
+<p align="left">
   <a href="https://mangodisk.app/zh">访问 MangoDisk 官网</a> · <a href="https://github.com/harry0703/MangoDisk">查看 GitHub 开源项目</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/harry0703/MangoDisk">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://assets.mangodisk.app/images/screenshots/zh/dark-01-deep-cleanup.jpg?ver=2.0.0">
+      <source media="(prefers-color-scheme: light)" srcset="https://assets.mangodisk.app/images/screenshots/zh/light-01-deep-cleanup.jpg?ver=2.0.0">
+      <img src="https://assets.mangodisk.app/images/screenshots/zh/light-01-deep-cleanup.jpg?ver=2.0.0" width="900" alt="MangoDisk 深度清理界面">
+    </picture>
+  </a>
 </p>
 
 ---
@@ -188,36 +248,44 @@
 - [x] 提供 **AI Agent、WebUI、API 和 CLI** 四种使用方式，既能快速上手，也能接入自动化流程
 - [x] 从主题自动完成脚本、配音、素材、字幕、配乐和剪辑，也支持在每个环节使用自定义内容
 - [x] 支持 **批量生成多条成片**、任务历史记录，以及生成设置与 API Key 的导入、导出和恢复
+- [x] 显示脚本、配音、素材下载、片段处理和最终渲染等阶段的任务进度
 
 ### 脚本与模型服务
 
 - [x] 支持 AI 自动生成或改写 **多语言视频脚本**，也可以直接使用自定义脚本
-- [x] 支持 [Kimi / Moonshot AI](https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo)、[OpenAI](https://platform.openai.com/api-keys)、[Anthropic Claude](https://platform.claude.com/settings/keys)、[Google Gemini](https://aistudio.google.com/app/apikey)、[DeepSeek](https://platform.deepseek.com/api_keys)、[阿里云通义千问](https://dashscope.console.aliyun.com/apiKey)、[Microsoft Azure OpenAI](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI)、[火山引擎方舟](https://www.volcengine.com/activity/ai618?utm_campaign=hw&utm_content=hw&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=MoneyPrinterTurbo)、[xAI Grok](https://console.x.ai/)、[MiniMax](https://platform.minimaxi.com/) 和 [小米 MiMo](https://platform.xiaomimimo.com/docs/zh-CN/quick-start/first-api-call) 等主流模型服务
-- [x] 兼容 [胜算云](https://www.shengsuanyun.com/?from=CH_XUQ4OTSK)、[APIMart](https://go.apimart.ai/gh-moneyprinterturbo)、[Cloudflare AI Gateway](https://dash.cloudflare.com/)、[魔搭 ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro)、[AIHubMix](https://aihubmix.com/)、[AIML API](https://aimlapi.com/app/keys)、[EvoLink](https://evolink.ai/dashboard/keys)、[OpenRouter](https://openrouter.ai/settings/keys)、[API Route](https://www.api-route.com/)、[Fluxion AI](https://fluxionai.space/register?source=github&campaign=moneyprinterturbo&promo=MONEYPRINTERTURBO)、[Ollama](https://ollama.com/)、[Claude Code 订阅](https://code.claude.com/docs)、[OneAPI](https://github.com/songquanpeng/one-api)、[LiteLLM](https://docs.litellm.ai/docs/providers)、[Groq](https://console.groq.com/keys) 和 [Pollinations AI](https://enter.pollinations.ai/) 等统一网关、聚合平台和本地运行环境
+- [x] 支持 [Kimi / Moonshot AI](https://platform.kimi.com?track_id=track-6eec1e56a4494e52adcaebbcbbefce59&aff=moneyprinterturbo)、[OpenAI](https://platform.openai.com/api-keys)、[Anthropic Claude](https://platform.claude.com/settings/keys)、[Google Gemini](https://aistudio.google.com/app/apikey)、[DeepSeek](https://platform.deepseek.com/api_keys)、[阿里云通义千问](https://dashscope.console.aliyun.com/apiKey)、[Microsoft Azure OpenAI](https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI)、[火山引擎方舟](https://www.volcengine.com/activity/ai618?utm_campaign=hw&utm_content=hw&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=MoneyPrinterTurbo)、[xAI Grok](https://console.x.ai/)、[MiniMax](https://platform.minimaxi.com/)、[Muse Spark](https://dev.meta.ai/docs/authentication)、[讯飞星火](https://maas.xfyun.cn/) 和 [小米 MiMo](https://platform.xiaomimimo.com/docs/zh-CN/quick-start/first-api-call) 等主流模型服务
+- [x] 兼容 [APIXO AI](https://apixo.ai/dashboard/api-keys)、[APINEBULA](https://apinebula.ai/ref/luDuqJIb)、[Jalapeno Cloud](https://www.jalapeno-cloud.ai/MoneyPrinterTurbo)、[无限星河 AI（Infistar）](https://infistar.cc/keys)、[Fluxion AI](https://fluxionai.space/register?source=github&campaign=moneyprinterturbo&promo=MONEYPRINTERTURBO)、[Cheaper Inference](https://cheaperinference.com/signup)、[Requesty](https://app.requesty.ai/api-keys)、[FutureInfra](https://futureinfra.ai/console/?screen=ai-router)、[Y-API](https://y-api.bestvirtualgoods.com/app/keys)、[Opper](https://platform.opper.ai)、[onomeo](https://onomeo.com/dashboard)、[EmpirioLabs AI](https://platform.empiriolabs.ai/dashboard/api-keys)、[Runcrate](https://www.runcrate.ai/dashboard/api-keys?utm_source=MoneyPrinterTurbo&utm_medium=directory&utm_campaign=gpu_pricing)、[CloudGPU](https://cloudgpu.app)、[cheapaimodel](https://console.cheapaimodel.ai/keys)、[胜算云](https://www.shengsuanyun.com/?from=CH_XUQ4OTSK)、[APIMart](https://go.apimart.ai/gh-moneyprinterturbo)、[Cloudflare AI Gateway](https://dash.cloudflare.com/)、[魔搭 ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro)、[AIHubMix](https://aihubmix.com/)、[AIML API](https://aimlapi.com/app/keys)、[EvoLink](https://evolink.ai/dashboard/keys)、[OpenRouter](https://openrouter.ai/settings/keys)、[API Route](https://www.api-route.com/)、[Kimi Code](https://www.kimi.com/code?aff=moneyprinterturbo)、[OpenAI - Codex](docs/codex-provider.md)、[ChatGPT Native OAuth](docs/chatgpt-provider.md)、[Ollama](https://ollama.com/)、[Claude Code 订阅](https://code.claude.com/docs)、[OneAPI](https://github.com/songquanpeng/one-api)、[LiteLLM](https://docs.litellm.ai/docs/providers)、[Groq](https://console.groq.com/keys) 和 [Pollinations AI](https://enter.pollinations.ai/) 等统一网关、聚合平台和本地运行环境
 
 ### 视频与图片素材
 
 - [x] 支持上传自己的 **本地图片和视频**，也可从 [Pexels（免费）](https://www.pexels.com/api/)、[Pixabay（免费）](https://pixabay.com/api/docs/) 和 [Coverr](https://coverr.co/developers?ctx=header_navigation) 获取高清库存素材
 - [x] 支持 [秘塔 MiniMax H3](https://metaso.cn/minimax-h3/?s=MPT) 文生视频，可生成 `768P`/`2K`、4～15 秒的原始素材，并适配 `9:16`、`16:9` 和 `1:1` 三种画幅
-- [x] 支持 [胜算云 AI 视频](https://www.shengsuanyun.com/?from=CH_XUQ4OTSK)，可生成多段 AI 视频素材，并沿用项目的配音、字幕和剪辑流程合成成片
+- [x] 支持[胜算云 LoomLoom AI 视频](https://www.shengsuanyun.com/?from=CH_XUQ4OTSK)，在获取报价并确认费用后生成多段素材，沿用项目的配音、字幕和剪辑流程合成成片
+- [x] 支持通过[无限星河 AI（Infistar）](https://infistar.cc/keys)和 [Jalapeno Cloud](https://www.jalapeno-cloud.ai/MoneyPrinterTurbo) 生成 AI 视频素材
 - [x] 原生接入 [火山引擎方舟 Seedance](https://console.volcengine.com/ark/region:ark+cn-beijing/apikey)，可根据脚本片段生成连贯的视频画面
 - [x] 支持 [WaveSpeed AI](https://wavespeed.ai) 文生视频，可根据脚本关键词快速生成原创素材
 - [x] 支持 [OFox](https://ofox.ai) 多模型文生视频，一个 API Key 即可调用 Seedance、Wan 等模型
 - [x] 通过异步 [MuAPI](https://muapi.ai) 文生视频接口生成 3～12 秒 AI 视频素材，并支持配置 Endpoint、画幅、分辨率和轮询参数
-- [x] 支持 [OpenAI 兼容文生图](https://platform.openai.com/docs/guides/image-generation)，可连接云端服务或自定义图片网关，并将生成图片转换为动态视频片段
-- [x] 支持调整片段时长、画面适配方式和素材匹配顺序，以适配不同画幅和叙事节奏
+- [x] 支持 [useapi.net](https://useapi.net/docs/api-google-flow-v1?utm_source=moneyprinterturbo&utm_medium=referral&utm_campaign=mpt-integration) AI 视频和图片：使用你自己的 Google AI 订阅通过 Google Flow 或 [Google Vids](https://useapi.net/docs/api-google-vids-v1?utm_source=moneyprinterturbo&utm_medium=referral&utm_campaign=mpt-integration) 生成 Veo 3.1、Gemini Omni Flash 视频（付费套餐可免费放大到 1080p，限 10 秒以内的片段），并生成 Nano Banana 图片，使用你自己的 [Kling](https://useapi.net/docs/api-kling-v1?utm_source=moneyprinterturbo&utm_medium=referral&utm_campaign=mpt-integration) 账号生成 Kling 视频和图片，使用你自己的 [Dreamina](https://useapi.net/docs/api-dreamina-v1?utm_source=moneyprinterturbo&utm_medium=referral&utm_campaign=mpt-integration) 账号生成 Seedance 视频
+- [x] 支持 [OpenAI 兼容文生图](https://platform.openai.com/docs/guides/image-generation)，可连接云端服务、自定义图片网关或项目配套的[本地 SDXL 图片服务](docs/local-image-server/README.md)；本地及生成图片均可选择静止或缓慢缩放效果
+- [x] 支持 [OpenAI - Codex 生图](docs/codex-provider.md)，复用 ChatGPT 登录并独立选择生图模型；需账号及所选模型具备生图权限
+- [x] 支持调整片段时长、播放速度与转场，选择裁剪填满或留边适配，并按随机或顺序模式匹配素材
+- [x] 可选接入 [TwelveLabs](https://playground.twelvelabs.io/)，按视频主题重排素材搜索词
 
 ### 配音、字幕与配乐
 
 - [x] 支持自动配音、上传配音和无配音三种方式，并提供音色试听与完整配音预览
 - [x] 集成 **Edge TTS（免费、无需 API Key）**、Azure Speech、SiliconFlow、Google Gemini、小米 MiMo、MiniMax、ElevenLabs、Chatterbox、Kokoro、Fish Audio 和 ModelBest VoxCPM 等配音服务
-- [x] 支持自动生成字幕，可调整字体、位置、颜色、大小、描边和背景样式
-- [x] 支持随机、本地及 AI 生成背景音乐，并可独立控制音量
+- [x] 支持 ModelBest VoxCPM 参考音频声音克隆；Edge TTS 支持用 `[pause: 2s]` 等标签控制口播停顿
+- [x] 支持使用 TTS 时间戳或本地 Whisper 自动生成字幕，提供整句、逐词显示及弹簧弹出动画，并可调整字体、位置、颜色、大小、描边和背景样式
+- [x] 支持随机配乐、预设歌曲试听和本地音乐上传，也可通过 [Sonilo](https://platform.sonilo.com/dashboard) 或 [ElevenLabs Video-to-Music](https://elevenlabs.io/) 根据视频生成配乐，并独立控制音量
 
 ### 成片与发布
 
 - [x] 支持竖屏 `9:16（1080×1920）`、横屏 `16:9（1920×1080）` 和方形 `1:1（1080×1080）`
 - [x] 支持一键 **跨平台发布**，生成完成后可自动上传至 **TikTok、Instagram 和 YouTube Shorts**
+- [x] 发布时可由 LLM 生成标题、文案和话题标签，并配置 YouTube 可见性与是否面向儿童
+- [x] 提供独立 CLI 的[本地视频项目](docs/video-projects.md)，支持场景修改、版本比较和复用未变更的渲染产物
 
 ## 作品展示 🎬
 
@@ -277,8 +345,9 @@
 ### 推荐使用方式
 
 - 不想手动安装和配置：直接使用 AI Agent 生成视频
+- 已有 Python 环境，想直接安装使用：[通过 pip 安装官方包](#通过-pip-安装官方包)
 - Windows 用户：优先使用一键启动包，适合快速体验
-- macOS / Linux 用户：优先使用 `uv` 进行本地部署
+- 需要源码部署或二次开发：使用 `uv` 管理环境和依赖
 - 想要隔离运行环境：优先使用 Docker 部署
 
 ### 使用 AI Agent 生成视频
@@ -312,7 +381,54 @@
 
 ## 安装部署 📥
 
-### 前提条件
+### 通过 pip 安装官方包
+
+官方 PyPI 包名为 **[mpt](https://pypi.org/project/mpt/)**，由 `harry0703` 维护。
+PyPI 上名为 `MoneyPrinterTurbo` 的包由第三方维护。
+
+无需克隆仓库，需要 Python 3.11 或更高版本，推荐使用 Python 3.11。
+
+**① 创建并激活虚拟环境**
+
+macOS / Linux：
+
+```shell
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Windows PowerShell：
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+**② 安装并启动**
+
+```shell
+python -m pip install mpt
+mpt webui
+```
+
+WebUI 会自动打开浏览器。指定端口且不自动打开浏览器时，运行
+`mpt webui --port 8503 --headless`；使用 CLI 生成视频前，可查看 `mpt cli --help`。
+
+**③ 配置服务与管理文件**
+
+首次启动会自动创建 `config.toml`。使用在线模型、素材或语音服务前，请在 WebUI
+基础设置中填写相应的 API Key。安装版默认将配置和生成文件保存在：
+
+| 系统    | 数据目录                                                                  |
+| ------- | ------------------------------------------------------------------------- |
+| macOS   | `~/Library/Application Support/MoneyPrinterTurbo`                         |
+| Windows | `%LOCALAPPDATA%\MoneyPrinterTurbo`                                        |
+| Linux   | `~/.local/share/MoneyPrinterTurbo`，或 `$XDG_DATA_HOME/MoneyPrinterTurbo` |
+
+可在启动前设置 `MPT_HOME` 更改目录，生成的视频位于其中的 `storage/tasks` 下。
+后续升级时，在已激活的虚拟环境中运行 `python -m pip install --upgrade mpt`。
+
+### 源码部署前提条件
 
 - 本地部署需要 Python 3.11 或更高版本
 - Windows 用户建议避免使用包含中文、特殊字符或空格的项目路径
@@ -338,6 +454,8 @@ Windows 用户可以参考微软的文档：
 1. [安装 WSL](https://learn.microsoft.com/zh-cn/windows/wsl/install)
 2. [在 WSL 中使用 Docker 容器](https://learn.microsoft.com/zh-cn/windows/wsl/tutorials/wsl-containers)
 
+首次启动前，请先在 `MoneyPrinterTurbo` 目录中将 `config.example.toml` 复制为 `config.toml`，供容器挂载使用；已有配置时请保留原文件。
+
 ```shell
 cd MoneyPrinterTurbo
 docker compose -f docker-compose.release.yml up
@@ -345,7 +463,6 @@ docker compose -f docker-compose.release.yml up
 
 > 默认推荐使用 `docker-compose.release.yml`，它会直接拉取 GitHub Container Registry 上的预构建镜像：`ghcr.io/harry0703/moneyprinterturbo:latest`。
 > 如果你需要本地重新构建镜像，可以继续使用 `docker compose up`。
-> 首次启动前，请将 `config.example.toml` 复制为 `config.toml`，供容器挂载使用。
 
 #### ② 访问 WebUI
 

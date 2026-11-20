@@ -113,6 +113,9 @@ MPT_VOLCENGINE_ARK_API_KEY
 MPT_OFOX_API_KEY
 MPT_METASO_MINIMAX_API_KEY
 MPT_MUAPI_API_KEY
+MPT_USEAPI_TOKEN
+MPT_INFISTAR_VIDEO_API_KEY
+MPT_JALAPENO_VIDEO_API_KEY
 ```
 
 When `SEEDANCE_CHARGE_CONFIRMATION_REQUIRED` is present, explain that every
@@ -136,6 +139,26 @@ this flag silently.
 When `MUAPI_CHARGE_CONFIRMATION_REQUIRED` is present, explain that every
 generated MuAPI clip creates a paid task. Only after the user explicitly
 confirms, rerun with `--confirm-muapi-charge`; never add this flag silently.
+
+When `USEAPI_CHARGE_CONFIRMATION_REQUIRED` is present, explain that every
+generated useapi.net clip spends credits on the user's own Google AI plan,
+Kling AI account or Dreamina account connected to useapi.net. Only after the
+user explicitly confirms, rerun with `--confirm-useapi-charge`; never add this
+flag silently.
+The `useapi_image` source uses the same `MPT_USEAPI_TOKEN`. Nano Banana images
+need no confirmation flag; a Kling image model (`useapi_image_model` starting
+with `kling-`) spends Kling credits and needs `--confirm-useapi-charge`, asked
+for the same way.
+
+When `INFISTAR_CHARGE_CONFIRMATION_REQUIRED` is present, explain that every
+generated Infistar clip creates a paid task. Only after the user explicitly
+confirms, rerun with `--confirm-infistar-charge`; never add this flag silently.
+Use the dedicated video key, separate from the Infistar LLM key.
+
+When `JALAPENO_CHARGE_CONFIRMATION_REQUIRED` is present, explain that every
+generated Jalapeno Cloud clip creates a paid task. After the user confirms,
+rerun with `--confirm-jalapeno-charge`. An empty video key reuses the
+configured Jalapeno Cloud LLM key; a dedicated video key takes priority.
 
 ### Exit code 1: repair or report
 

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -19,6 +20,10 @@ from app.services.video_project import (
     main,
     stage_graph,
 )
+
+# A child command that never finishes on its own; the test only ends it
+# through the project's deadline or cancellation handling.
+HANGING_COMMAND = [sys.executable, "-c", "import time; time.sleep(60)"]
 
 
 def _media(arguments):
@@ -375,16 +380,13 @@ project.render(on_stage=crash)
 
 
 def test_command_deadline_and_active_cancellation(tmp_path):
-    import sys
     import time
 
     project = VideoProject(tmp_path)
     cancellation = tmp_path / "cancel.json"
     before = time.monotonic()
     with pytest.raises(ProjectError, match="deadline"):
-        project._run(
-            [sys.executable, "-c", "import time; time.sleep(60)"], cancellation, 0.15
-        )
+        project._run(HANGING_COMMAND, cancellation, 0.15)
     assert time.monotonic() - before < 3
     timer = threading.Timer(
         0.15, lambda: _atomic_json(cancellation, {"cancelled": True})
@@ -392,9 +394,7 @@ def test_command_deadline_and_active_cancellation(tmp_path):
     timer.start()
     try:
         with pytest.raises(RenderCancelled):
-            project._run(
-                [sys.executable, "-c", "import time; time.sleep(60)"], cancellation, 30
-            )
+            project._run(HANGING_COMMAND, cancellation, 30)
     finally:
         timer.join(timeout=3)
 
@@ -420,6 +420,16 @@ def test_cli_native_render(native):
     report = json.loads(completed.stdout)
     assert report["state"] == "succeeded"
     assert Path(report["export"]["path"]).is_file()
+    assert [clip["scene_id"] for clip in report["scene_clips"]] == [
+        "opening",
+        "closing",
+    ]
+    for clip in report["scene_clips"]:
+        scene_id = clip["scene_id"]
+        assert Path(clip["path"]).is_file()
+        assert clip["sha256"] == report["stages"][f"{scene_id}:scene"]["sha256"]
+    assert _pixel(report["scene_clips"][0]["path"], 0.2)[0] > 200
+    assert _pixel(report["scene_clips"][1]["path"], 0.2)[2] > 200
 
 
 def test_order_and_render_settings_invalidation(native):
