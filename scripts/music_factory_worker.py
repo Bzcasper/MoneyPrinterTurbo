@@ -574,11 +574,15 @@ def main(request_file: Path) -> None:
         update(clip, "GENERATING", {"stage": "PLANNING", "publishing_approved": False})
         treatment = story(clip, folder)
         print("STORY_ACCEPTED", clip["clip_id"], clip["media_kind"], flush=True)
-        results = []
+        # One decoded-motion canary before dispatching the remaining 29 scenes.
+        # An unavailable or non-verified provider must not fan out 30 requests.
+        first = video_scene(1, treatment["scenes"][0], treatment, folder, clip["media_kind"])
+        results = [first]
+        print("MOTION_SCENE_VERIFIED", first["slot"], "1 /30", flush=True)
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = {
                 pool.submit(video_scene, i, s, treatment, folder, clip["media_kind"]): i
-                for i, s in enumerate(treatment["scenes"], 1)
+                for i, s in enumerate(treatment["scenes"], 1) if i > 1
             }
             for future in as_completed(futures):
                 v = future.result()

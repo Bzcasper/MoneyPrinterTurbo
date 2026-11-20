@@ -91,6 +91,15 @@ def request_video(provider: str, prompt: str, slot: int, timeout: int = 360) -> 
             result = json.load(response)
     except urllib.error.HTTPError as exc:
         detail = exc.read(4096).decode("utf-8", errors="replace")
+        # Permanent request rejection and billing/fair-use holds fail closed.
+        # Retrying the same rejected request cannot establish zero-credit entitlement.
+        if exc.code in (400, 402, 403) or re.search(
+            r"fair[- ]use|credit[- ]charged|credit spending|billing.*verif|unlimited video unavailable",
+            detail, re.I,
+        ):
+            raise VideoProviderPolicyError(
+                f"Video provider refused a credit-free request (HTTP {exc.code})"
+            ) from exc
         if re.search(r"\[nsfw\]|considered unsafe|content.policy|safety.filter", detail, re.I):
             raise VideoProviderPolicyError(
                 "Video provider refused the prompt under its content policy"
