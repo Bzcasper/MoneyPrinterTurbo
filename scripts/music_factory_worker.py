@@ -22,9 +22,9 @@ from zipfile import ZIP_STORED, ZipFile
 ROOT = Path("/home/bobby/Videos/scene-director/automatic")
 REPO = Path("/home/bobby/projects/suno-typebeat-foundation")
 MODAL = REPO / ".venv/bin/modal"
-FIRE_URL = "http://10.0.0.242:5678/webhook/strictlybeats-unlimited-firefly-video"
-PLAN_URL = "http://10.0.0.242:5678/webhook/strictlybeats-full-motion-wav"
-MPT_URL = "http://127.0.0.1:8080/api/v1/internal/type-beat/autopilot/report"
+FIRE_URL = "http://10.0.0.243:5678/webhook/strictlybeats-unlimited-firefly-video"
+PLAN_URL = "http://10.0.0.243:5678/webhook/strictlybeats-full-motion-wav"
+MPT_URL = "http://10.0.0.248:8080/api/v1/internal/type-beat/autopilot/report"
 UUID = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
 REMOTE_VIDEO = re.compile(
     r"^/srv/data/n8n-media/store/firefly/videos/fullmotion-[0-9]+-scene-(\d+)\.mp4$"

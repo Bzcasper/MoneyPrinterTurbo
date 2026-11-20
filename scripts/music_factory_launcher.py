@@ -102,7 +102,7 @@ def start_job(item: dict, *, dry_run: bool = False) -> dict:
             stderr=subprocess.STDOUT,
             start_new_session=True,
             close_fds=True,
-            cwd="/home/bobby/projects/MoneyPrinterTurbo",
+            cwd=str(WORKER.parent.parent),
         )
     payload = {
         "project_id": project,

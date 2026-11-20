@@ -20,7 +20,7 @@ class VideoProviderPolicyError(RuntimeError):
 
 PROVIDERS = ("firefly", "grok2api", "metaai", "qwenapi")
 HEALTH = Path("/home/bobby/.cache/scene-continuity/video-provider-health.json")
-LAN = "http://10.0.0.242:5678/webhook"
+LAN = "http://10.0.0.243:5678/webhook"
 ENDPOINTS = {
     "firefly": LAN + "/strictlybeats-unlimited-firefly-video",
     "grok2api": LAN + "/grok-video-ops",

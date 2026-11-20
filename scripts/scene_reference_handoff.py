@@ -20,7 +20,7 @@ from PIL import Image
 from scripts.extract_firefly_tail_frame import extract_last_frame
 
 ROOT = Path("/home/bobby/Videos/scene-director/reference-frames")
-STORAGE_URL = "http://10.0.0.242:5678/webhook/firefly-storage-upload"
+STORAGE_URL = "http://10.0.0.243:5678/webhook/firefly-storage-upload"
 PROJECT = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 ADOBE_ID = re.compile(r"^[A-Za-z0-9._:-]{4,128}$")
 
