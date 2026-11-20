@@ -42,7 +42,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             from app import cli
 
-        cli._force_utf8_console()
+        from app.utils.logging_utils import force_utf8_console
+
+        force_utf8_console()
         return cli.run_cli(argv[1:])
 
     parser = argparse.ArgumentParser(prog="mpt", description="MoneyPrinterTurbo")
