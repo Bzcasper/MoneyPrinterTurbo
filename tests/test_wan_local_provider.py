@@ -69,6 +69,16 @@ class WanLocalProviderTests(unittest.TestCase):
             }}))
             self.assertEqual(router.scene_provider_order(1, health_file=health), ('metaai',))
 
+    def test_production_benchmark_never_submits_without_smoke_qa(self):
+        from scripts import music_factory_wan22_production_benchmark as bench
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)
+            with patch.object(bench, 'SMOKE', folder/'missing-smoke.json'):
+                with patch.object(bench, 'BENCHMARK', folder/'uncreated-output'):
+                    with self.assertRaisesRegex(wan.WanUnavailable, 'smoke output'):
+                        bench.submit(1800)
+                    self.assertFalse((folder/'uncreated-output').exists())
+
     def test_old_cloud_canary_refuses_local_wan_without_mutating_health(self):
         from scripts import music_factory_provider_canary as legacy
         self.assertNotIn('wan22_local', legacy.CLOUD_CANARY_PROVIDERS)

@@ -73,3 +73,22 @@ The existing music_factory_provider_canary.py command accepts only remote
 cloud video providers. wan22_local is deliberately excluded: it requires an
 approved local source still plus an independently verified full-size native
 video receipt. A text-only canary must never overwrite its health ledger entry.
+
+### Full-resolution feasibility benchmark (not automatic admission)
+
+The CLI scripts.music_factory_wan22_production_benchmark is a technical-only
+1280x704, 61-frame, 12 FPS, six-sampling-step benchmark. It uses the verified
+Kijai FP8 checkpoint, CPU text encoding, and tiled VAE decoding. It will not
+run until the smaller FP8 smoke result contains a real, SHA-verified moving MP4.
+It never updates the production provider health ledger, changes publication
+rights, or bypasses canonical source-image or semantic QA checks.
+
+Run its static graph validation (no GPU job) as:
+    python -m scripts.music_factory_wan22_production_benchmark --check
+
+A real GPU submission is intentionally separate:
+    python -m scripts.music_factory_wan22_production_benchmark --run
+
+The latter creates a unique, non-overwriting benchmark directory containing
+the ComfyUI prompt ID, execution history, file SHA-256 and native decoded-motion
+evidence. A technical result alone is never a publication or provider approval.
